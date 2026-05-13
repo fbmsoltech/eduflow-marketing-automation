@@ -26,7 +26,7 @@ Rules:
 
 ## Supporting Branches
 
-### feature/*
+### feature/\*
 
 Used for new application features.
 
@@ -42,7 +42,7 @@ feature/outbox-pattern
 feature/automation-engine
 ```
 
-### fix/*
+### fix/\*
 
 Used for bug fixes before production release.
 
@@ -53,7 +53,7 @@ fix/lead-event-validation
 fix/automation-condition-evaluator
 ```
 
-### hotfix/*
+### hotfix/\*
 
 Used for urgent production fixes.
 
@@ -63,7 +63,7 @@ Examples:
 hotfix/1.0.1-webhook-retry
 ```
 
-### release/*
+### release/\*
 
 Used to prepare a production release.
 
@@ -74,7 +74,7 @@ release/1.0.0
 release/1.1.0
 ```
 
-### docs/*
+### docs/\*
 
 Used for documentation changes.
 
@@ -85,7 +85,7 @@ docs/project-documentation
 docs/api-documentation
 ```
 
-### chore/*
+### chore/\*
 
 Used for tooling, dependencies, repository configuration and non-feature changes.
 

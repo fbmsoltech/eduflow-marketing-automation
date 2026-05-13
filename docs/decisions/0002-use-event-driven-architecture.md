@@ -45,7 +45,6 @@ Business events will be persisted, published to a message broker and processed b
 
 ## Main Event Types
 
-
 - `lead.created`
 - `form.started`
 - `form.submitted`
