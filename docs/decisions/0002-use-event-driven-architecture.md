@@ -45,19 +45,18 @@ Business events will be persisted, published to a message broker and processed b
 
 ## Main Event Types
 
-```txt
-lead.created
-form.started
-form.submitted
-email.opened
-email.clicked
-whatsapp.link_clicked
-document.downloaded
-interview.scheduled
-interview.confirmed
-candidate.approved
-candidate.rejected
-```
+
+- `lead.created`
+- `form.started`
+- `form.submitted`
+- `email.opened`
+- `email.clicked`
+- `whatsapp.link_clicked`
+- `document.downloaded`
+- `interview.scheduled`
+- `interview.confirmed`
+- `candidate.approved`
+- `candidate.rejected`
 
 ## Alternatives Considered
 
