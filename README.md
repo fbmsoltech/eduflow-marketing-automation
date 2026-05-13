@@ -6,7 +6,15 @@ The project simulates a real-world scenario where organizations need to capture 
 
 ## Current Status
 
-Project initialization.
+Initial documentation phase.
+
+## Business Case
+
+Academic organizations, courses and communities often run campaigns to attract candidates, students or participants.
+
+Most of the follow-up process is manual: confirming registrations, reminding candidates, identifying engaged leads, creating follow-up tasks and tracking conversion metrics.
+
+EduFlow provides a marketing automation engine where each lead interaction can trigger rules and actions asynchronously.
 
 ## Main Goals
 
@@ -31,3 +39,19 @@ Project initialization.
 - Jest
 - GitHub Actions
 - Azure Container Apps
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [GitFlow Strategy](docs/gitflow.md)
+- [Deployment Strategy](docs/deployment.md)
+
+## Architecture Decision Records
+
+- [0001 - Use TypeScript and NestJS](docs/decisions/0001-use-typescript-nestjs.md)
+- [0002 - Use Event-Driven Architecture](docs/decisions/0002-use-event-driven-architecture.md)
+- [0003 - Use Outbox Pattern](docs/decisions/0003-use-outbox-pattern.md)
+
+## Status
+
+This project is under active development.
