@@ -6,7 +6,7 @@ The project simulates a real-world scenario where organizations need to capture 
 
 ## Current Status
 
-Initial documentation phase.
+NestJS application bootstrap phase.
 
 ## Business Case
 
@@ -51,6 +51,34 @@ EduFlow provides a marketing automation engine where each lead interaction can t
 - [0001 - Use TypeScript and NestJS](docs/decisions/0001-use-typescript-nestjs.md)
 - [0002 - Use Event-Driven Architecture](docs/decisions/0002-use-event-driven-architecture.md)
 - [0003 - Use Outbox Pattern](docs/decisions/0003-use-outbox-pattern.md)
+
+## Local API
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the API locally:
+
+```bash
+npm run start:dev
+```
+
+The health endpoint is available at:
+
+```txt
+GET /health
+```
+
+Build and test:
+
+```bash
+npm run build
+npm run lint
+npm run test:e2e
+```
 
 ## Status
 

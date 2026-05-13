@@ -1,0 +1,43 @@
+{
+  "name": "eduflow-marketing-automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Event-driven marketing automation platform for academic campaigns.",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p apps/api/tsconfig.app.json",
+    "start": "node dist/apps/api/main.js",
+    "start:dev": "nest start api --watch",
+    "lint": "eslint \"apps/**/*.ts\"",
+    "test": "jest",
+    "test:e2e": "jest --config apps/api/test/jest-e2e.json"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/core": "^10.4.15",
+    "@nestjs/platform-express": "^10.4.15",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^10.4.8",
+    "@nestjs/testing": "^10.4.15",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.7",
+    "@types/supertest": "^6.0.2",
+    "eslint": "^9.18.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.4.2",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
