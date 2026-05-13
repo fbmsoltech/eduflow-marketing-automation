@@ -23,12 +23,9 @@ describe('GET /health', () => {
   it('returns the application status', async () => {
     const httpServer = app.getHttpServer() as Server;
 
-    await request(httpServer)
-      .get('/health')
-      .expect(200)
-      .expect({
-        status: 'ok',
-        service: 'eduflow-api',
-      });
+    await request(httpServer).get('/health').expect(200).expect({
+      status: 'ok',
+      service: 'eduflow-api',
+    });
   });
 });

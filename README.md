@@ -6,7 +6,7 @@ The project simulates a real-world scenario where organizations need to capture 
 
 ## Current Status
 
-NestJS application bootstrap phase.
+Code quality and local workflow tooling phase.
 
 ## Business Case
 
@@ -77,8 +77,23 @@ Build and test:
 ```bash
 npm run build
 npm run lint
+npm run test
 npm run test:e2e
 ```
+
+Format files:
+
+```bash
+npm run format
+```
+
+## Code Quality
+
+Local commits use Husky hooks.
+
+- `lint-staged` formats and lints staged files before commit.
+- `commitlint` validates commit messages using Conventional Commits.
+- Prettier and EditorConfig keep formatting consistent across editors.
 
 ## Status
 

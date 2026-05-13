@@ -8,15 +8,15 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         project: ['./tsconfig.json', './apps/api/tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname
-      }
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-floating-promises': 'error'
-    }
+      '@typescript-eslint/no-floating-promises': 'error',
+    },
   },
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**']
-  }
+    ignores: ['dist/**', 'coverage/**', 'node_modules/**'],
+  },
 );
