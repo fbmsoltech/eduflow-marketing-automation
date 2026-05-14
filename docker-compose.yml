@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: eduflow-postgres
+    environment:
+      POSTGRES_DB: eduflow
+      POSTGRES_USER: eduflow
+      POSTGRES_PASSWORD: eduflow
+    ports:
+      - '5432:5432'
+    volumes:
+      - eduflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U eduflow -d eduflow']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - eduflow_local
+
+  redis:
+    image: redis:7-alpine
+    container_name: eduflow-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - eduflow_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - eduflow_local
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: eduflow-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: eduflow
+      RABBITMQ_DEFAULT_PASS: eduflow
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - eduflow_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - eduflow_local
+
+volumes:
+  eduflow_postgres_data:
+  eduflow_redis_data:
+  eduflow_rabbitmq_data:
+
+networks:
+  eduflow_local:
+    name: eduflow_local
