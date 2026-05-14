@@ -6,7 +6,7 @@ The project simulates a real-world scenario where organizations need to capture 
 
 ## Current Status
 
-Code quality and local workflow tooling phase.
+Local infrastructure phase.
 
 ## Business Case
 
@@ -45,6 +45,7 @@ EduFlow provides a marketing automation engine where each lead interaction can t
 - [Architecture](docs/architecture.md)
 - [GitFlow Strategy](docs/gitflow.md)
 - [Deployment Strategy](docs/deployment.md)
+- [Local Development](docs/local-development.md)
 
 ## Architecture Decision Records
 
@@ -71,6 +72,28 @@ The health endpoint is available at:
 ```txt
 GET /health
 ```
+
+## Local Infrastructure
+
+Start PostgreSQL, Redis and RabbitMQ:
+
+```bash
+npm run infra:up
+```
+
+Check service status:
+
+```bash
+npm run infra:ps
+```
+
+RabbitMQ Management UI is available at:
+
+```txt
+http://localhost:15672
+```
+
+Default local credentials are documented in `.env.example`.
 
 Build and test:
 

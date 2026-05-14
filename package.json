@@ -6,6 +6,10 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc -p apps/api/tsconfig.app.json",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+    "infra:ps": "docker compose ps",
+    "infra:up": "docker compose up -d",
     "start": "node dist/apps/api/main.js",
     "start:dev": "nest start api --watch",
     "lint": "eslint \"apps/**/*.ts\" --max-warnings 0",
