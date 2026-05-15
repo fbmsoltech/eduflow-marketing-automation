@@ -1,0 +1,328 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  FINISHED
+  ARCHIVED
+}
+
+enum LeadStatus {
+  NEW
+  ENGAGED
+  QUALIFIED
+  DISQUALIFIED
+  CONVERTED
+  ARCHIVED
+}
+
+enum AutomationFlowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum AutomationConditionOperator {
+  EQUALS
+  NOT_EQUALS
+  CONTAINS
+  GREATER_THAN
+  GREATER_THAN_OR_EQUALS
+  LESS_THAN
+  LESS_THAN_OR_EQUALS
+  EXISTS
+  NOT_CONTAINS
+  NOT_EXISTS
+}
+
+enum AutomationActionType {
+  CREATE_TASK
+  SEND_WEBHOOK
+  SEND_NOTIFICATION
+  UPDATE_LEAD_STATUS
+  INCREASE_LEAD_SCORE
+  DECREASE_LEAD_SCORE
+}
+
+enum AutomationExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum OutboxMessageStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+  DEAD_LETTERED
+}
+
+enum DeadLetterMessageStatus {
+  PENDING
+  REPROCESSED
+  IGNORED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  campaignId     String?      @map("campaign_id") @db.Uuid
+  leadId         String?      @map("lead_id") @db.Uuid
+  title          String
+  description    String?
+  status         TaskStatus   @default(OPEN)
+  priority       TaskPriority @default(MEDIUM)
+  dueAt          DateTime?    @map("due_at")
+  metadata       Json?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([campaignId, status])
+  @@index([leadId, status])
+  @@index([priority, dueAt])
+  @@map("tasks")
+}
+
+model Organization {
+  id                   String                @id @default(uuid()) @db.Uuid
+  name                 String
+  slug                 String                @unique
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  campaigns            Campaign[]
+  leads                Lead[]
+  leadEvents           LeadEvent[]
+  automationFlows      AutomationFlow[]
+  automationExecutions AutomationExecution[]
+  outboxMessages       OutboxMessage[]
+  deadLetterMessages   DeadLetterMessage[]
+  tasks                Task[]
+
+  @@map("organizations")
+}
+
+model Campaign {
+  id                   String                @id @default(uuid()) @db.Uuid
+  organizationId       String                @map("organization_id") @db.Uuid
+  name                 String
+  slug                 String
+  status               CampaignStatus        @default(DRAFT)
+  startsAt             DateTime?             @map("starts_at")
+  endsAt               DateTime?             @map("ends_at")
+  metadata             Json?
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads                Lead[]
+  leadEvents           LeadEvent[]
+  automationFlows      AutomationFlow[]
+  automationExecutions AutomationExecution[]
+  tasks                Task[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+  @@map("campaigns")
+}
+
+model Lead {
+  id                   String                @id @default(uuid()) @db.Uuid
+  organizationId       String                @map("organization_id") @db.Uuid
+  campaignId           String?               @map("campaign_id") @db.Uuid
+  email                String
+  fullName             String?               @map("full_name")
+  phone                String?
+  status               LeadStatus            @default(NEW)
+  score                Int                   @default(0)
+  metadata             Json?
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign             Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  events               LeadEvent[]
+  automationExecutions AutomationExecution[]
+  tasks                Task[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId, status])
+  @@index([campaignId, status])
+  @@map("leads")
+}
+
+model LeadEvent {
+  id                   String                @id @default(uuid()) @db.Uuid
+  eventId              String                @unique @default(uuid()) @map("event_id") @db.Uuid
+  eventType            String                @map("event_type")
+  organizationId       String                @map("organization_id") @db.Uuid
+  campaignId           String?               @map("campaign_id") @db.Uuid
+  leadId               String?               @map("lead_id") @db.Uuid
+  occurredAt           DateTime              @map("occurred_at")
+  payload              Json
+  correlationId        String?               @map("correlation_id")
+  idempotencyKey       String               @map("idempotency_key")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign             Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  lead                 Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  automationExecutions AutomationExecution[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, eventType, occurredAt])
+  @@index([campaignId, eventType])
+  @@index([leadId, occurredAt])
+  @@map("lead_events")
+}
+
+model AutomationFlow {
+  id               String                @id @default(uuid()) @db.Uuid
+  organizationId   String                @map("organization_id") @db.Uuid
+  campaignId       String?               @map("campaign_id") @db.Uuid
+  name             String
+  status           AutomationFlowStatus  @default(DRAFT)
+  triggerEventType String                @map("trigger_event_type")
+  metadata         Json?
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+  organization     Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign         Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  conditions       AutomationCondition[]
+  actions          AutomationAction[]
+  executions       AutomationExecution[]
+
+  @@index([organizationId, status])
+  @@index([campaignId, status])
+  @@index([triggerEventType, status])
+  @@map("automation_flows")
+}
+
+model AutomationCondition {
+  id            String                      @id @default(uuid()) @db.Uuid
+  flowId        String                      @map("flow_id") @db.Uuid
+  fieldPath     String                      @map("field_path")
+  operator      AutomationConditionOperator
+  expectedValue Json?                       @map("expected_value")
+  sortOrder     Int                         @default(0) @map("sort_order")
+  createdAt     DateTime                    @default(now()) @map("created_at")
+  updatedAt     DateTime                    @updatedAt @map("updated_at")
+  flow          AutomationFlow              @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@index([flowId, sortOrder])
+  @@map("automation_conditions")
+}
+
+model AutomationAction {
+  id        String               @id @default(uuid()) @db.Uuid
+  flowId    String               @map("flow_id") @db.Uuid
+  type      AutomationActionType
+  config    Json
+  sortOrder Int                  @default(0) @map("sort_order")
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  flow      AutomationFlow       @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@index([flowId, sortOrder])
+  @@map("automation_actions")
+}
+
+model AutomationExecution {
+  id             String                    @id @default(uuid()) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
+  campaignId     String?                   @map("campaign_id") @db.Uuid
+  flowId         String                    @map("flow_id") @db.Uuid
+  leadId         String?                   @map("lead_id") @db.Uuid
+  leadEventId    String?                   @map("lead_event_id") @db.Uuid
+  status         AutomationExecutionStatus @default(PENDING)
+  startedAt      DateTime                  @default(now()) @map("started_at")
+  finishedAt     DateTime?                 @map("finished_at")
+  errorMessage   String?                   @map("error_message")
+  metadata       Json?
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign       Campaign?                 @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  flow           AutomationFlow            @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  lead           Lead?                     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadEvent      LeadEvent?                @relation(fields: [leadEventId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, startedAt])
+  @@index([flowId, status])
+  @@index([leadId, startedAt])
+  @@map("automation_executions")
+}
+
+model OutboxMessage {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String?             @map("organization_id") @db.Uuid
+  aggregateId    String              @map("aggregate_id")
+  aggregateType  String              @map("aggregate_type")
+  eventType      String              @map("event_type")
+  payload        Json
+  status         OutboxMessageStatus @default(PENDING)
+  attempts       Int                 @default(0)
+  occurredAt     DateTime            @map("occurred_at")
+  publishedAt    DateTime?           @map("published_at")
+  lastError      String?             @map("last_error")
+  correlationId  String?             @map("correlation_id")
+  idempotencyKey String?             @map("idempotency_key")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  deadLetters    DeadLetterMessage[]
+
+  @@index([idempotencyKey])
+  @@index([status, occurredAt])
+  @@index([aggregateType, aggregateId])
+  @@index([organizationId, status])
+  @@map("outbox_messages")
+}
+
+model DeadLetterMessage {
+  id              String                  @id @default(uuid()) @db.Uuid
+  organizationId  String?                 @map("organization_id") @db.Uuid
+  outboxMessageId String?                 @map("outbox_message_id") @db.Uuid
+  eventType       String                  @map("event_type")
+  payload         Json
+  reason          String
+  errorDetails    Json?                   @map("error_details")
+  status          DeadLetterMessageStatus @default(PENDING)
+  failedAt        DateTime                @default(now()) @map("failed_at")
+  reprocessedAt   DateTime?               @map("reprocessed_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  organization    Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  outboxMessage   OutboxMessage?          @relation(fields: [outboxMessageId], references: [id], onDelete: SetNull)
+
+  @@index([status, failedAt])
+  @@index([organizationId, status])
+  @@index([outboxMessageId])
+  @@map("dead_letter_messages")
+}
