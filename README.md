@@ -95,6 +95,32 @@ http://localhost:15672
 
 Default local credentials are documented in `.env.example`.
 
+## Database
+
+Copy the example environment file before running Prisma commands:
+
+```bash
+cp .env.example .env
+```
+
+Generate Prisma Client:
+
+```bash
+npm run prisma:generate
+```
+
+Apply database migrations to the local PostgreSQL service:
+
+```bash
+npm run prisma:migrate:dev
+```
+
+Open Prisma Studio:
+
+```bash
+npm run prisma:studio
+```
+
 Build and test:
 
 ```bash

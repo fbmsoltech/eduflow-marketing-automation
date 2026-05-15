@@ -27,6 +27,8 @@ REDIS_URL=redis://localhost:6379
 RABBITMQ_URL=amqp://eduflow:eduflow@localhost:5672
 ```
 
+Prisma commands read `DATABASE_URL` from the local environment. For the default local setup, copy `.env.example` to `.env` before running migrations.
+
 RabbitMQ Management UI credentials:
 
 ```txt
@@ -57,6 +59,28 @@ Open RabbitMQ Management UI:
 ```txt
 http://localhost:15672
 ```
+
+## Database Migrations
+
+Generate Prisma Client:
+
+```bash
+npm run prisma:generate
+```
+
+Create and apply local development migrations:
+
+```bash
+npm run prisma:migrate:dev
+```
+
+Open Prisma Studio:
+
+```bash
+npm run prisma:studio
+```
+
+If Prisma reports authentication errors while Docker Compose is running, check whether another local PostgreSQL service is already listening on port `5432`. In that case, stop the conflicting local service or point `DATABASE_URL` to the PostgreSQL instance you intend to migrate.
 
 ## Stop Services
 
