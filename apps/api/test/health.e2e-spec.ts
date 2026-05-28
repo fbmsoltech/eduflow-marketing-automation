@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Server } from 'node:http';
 import request from 'supertest';
+import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
 import { AppModule } from '../src/app.module';
 
 describe('GET /health', () => {
@@ -10,14 +11,22 @@ describe('GET /health', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue({
+        $connect: () => Promise.resolve(),
+        $disconnect: () => Promise.resolve(),
+      })
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('returns the application status', async () => {
