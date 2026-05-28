@@ -8,6 +8,8 @@ if (existsSync('.env')) {
 const databaseUrl =
   process.env['DATABASE_URL'] ?? 'postgresql://eduflow:eduflow@localhost:5432/eduflow';
 
+process.env['DATABASE_URL'] = databaseUrl;
+
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   datasource: {
