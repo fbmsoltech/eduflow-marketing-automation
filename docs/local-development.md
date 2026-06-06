@@ -27,6 +27,8 @@ REDIS_URL=redis://localhost:6379
 RABBITMQ_URL=amqp://eduflow:eduflow@localhost:5672
 RABBITMQ_EXCHANGE=eduflow.events
 RABBITMQ_EXCHANGE_TYPE=topic
+OUTBOX_PUBLISHER_ENABLED=true
+OUTBOX_PUBLISHER_INTERVAL_MS=5000
 OUTBOX_PUBLISH_LIMIT=100
 ```
 
@@ -89,6 +91,27 @@ The endpoint returns:
 
 After a successful publication, inspect `GET /outbox/messages` to confirm that the message is
 `PUBLISHED`, `publishedAt` is filled and `attempts` was incremented.
+
+## Run the Outbox Publisher Worker
+
+With PostgreSQL and RabbitMQ running, start the automatic outbox publisher worker:
+
+```bash
+npm run start:worker:outbox
+```
+
+The worker runs as a NestJS application context without opening an HTTP server. When
+`OUTBOX_PUBLISHER_ENABLED=true`, it immediately publishes one batch and repeats every
+`OUTBOX_PUBLISHER_INTERVAL_MS`. Each batch processes up to `OUTBOX_PUBLISH_LIMIT` pending messages.
+
+Set `OUTBOX_PUBLISHER_ENABLED=false` to start the process without running the publishing loop. The
+worker skips overlapping cycles, logs each cycle result and handles cycle errors without stopping.
+
+To run the compiled worker after `npm run build`:
+
+```bash
+npm run start:worker:outbox:prod
+```
 
 ## Database Migrations
 
