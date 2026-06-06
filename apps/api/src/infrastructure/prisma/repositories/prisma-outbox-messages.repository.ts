@@ -54,6 +54,39 @@ export class PrismaOutboxMessagesRepository implements OutboxMessagesRepository 
     return outboxMessages.map((outboxMessage) => this.toDomain(outboxMessage));
   }
 
+  async listPending(limit: number): Promise<OutboxMessage[]> {
+    const outboxMessages = await this.prisma.outboxMessage.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { occurredAt: 'asc' },
+      take: limit,
+    });
+
+    return outboxMessages.map((outboxMessage) => this.toDomain(outboxMessage));
+  }
+
+  async markAsPublished(id: string, publishedAt: Date): Promise<void> {
+    await this.prisma.outboxMessage.update({
+      where: { id },
+      data: {
+        status: 'PUBLISHED',
+        publishedAt,
+        attempts: { increment: 1 },
+        lastError: null,
+      },
+    });
+  }
+
+  async markAsFailed(id: string, lastError: string): Promise<void> {
+    await this.prisma.outboxMessage.update({
+      where: { id },
+      data: {
+        status: 'FAILED',
+        attempts: { increment: 1 },
+        lastError,
+      },
+    });
+  }
+
   private toDomain(outboxMessage: PrismaOutboxMessage): OutboxMessage {
     return OutboxMessage.restore({
       id: outboxMessage.id,

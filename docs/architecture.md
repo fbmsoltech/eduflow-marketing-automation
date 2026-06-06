@@ -231,7 +231,10 @@ Current implementation scope:
 - `POST /lead-events` stores the `lead_events` row and a `PENDING` `outbox_messages` row in the same PostgreSQL transaction.
 - Idempotent retries for the same `organizationId` and `idempotencyKey` return the existing lead event and do not create a duplicate outbox message.
 - Read-only inspection endpoints are available at `GET /outbox/messages` and `GET /outbox/messages/:id`.
-- Message publishing, workers, retries and dead-letter handling remain planned for later phases.
+- `POST /outbox/messages/publish` manually publishes a limited batch of `PENDING` messages to the durable `eduflow.events` topic exchange.
+- Lead event messages use routing keys in the `lead-events.<eventType>` format.
+- Successful publications are marked as `PUBLISHED`; failed publications are marked as `FAILED`.
+- Consumers, automatic scheduling, retries and dead-letter handling remain planned for later phases.
 
 ## Retry and Dead Letter Strategy
 
