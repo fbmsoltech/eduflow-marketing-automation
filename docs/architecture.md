@@ -226,6 +226,13 @@ COMMIT
 
 Then a background worker publishes pending outbox messages to the message broker.
 
+Current implementation scope:
+
+- `POST /lead-events` stores the `lead_events` row and a `PENDING` `outbox_messages` row in the same PostgreSQL transaction.
+- Idempotent retries for the same `organizationId` and `idempotencyKey` return the existing lead event and do not create a duplicate outbox message.
+- Read-only inspection endpoints are available at `GET /outbox/messages` and `GET /outbox/messages/:id`.
+- Message publishing, workers, retries and dead-letter handling remain planned for later phases.
+
 ## Retry and Dead Letter Strategy
 
 The message processing flow should support retries for transient failures.

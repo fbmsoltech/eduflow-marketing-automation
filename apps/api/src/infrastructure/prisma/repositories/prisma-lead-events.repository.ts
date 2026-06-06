@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LeadEvent as PrismaLeadEvent, Prisma } from '@prisma/client';
 import { LeadEvent, LeadEventPayload } from '../../../domain/lead-events/lead-event.entity';
+import { OutboxMessage } from '../../../domain/outbox/outbox-message.entity';
 import { LeadEventsRepository } from '../../../application/lead-events/lead-events.repository';
 import { PrismaService } from '../prisma.service';
 
@@ -34,6 +35,71 @@ export class PrismaLeadEventsRepository implements LeadEventsRepository {
         const existingLeadEvent = await this.findByOrganizationIdAndIdempotencyKey(
           data.organizationId,
           data.idempotencyKey,
+        );
+
+        if (existingLeadEvent) {
+          return existingLeadEvent;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async createWithOutboxMessage(
+    leadEvent: LeadEvent,
+    outboxMessage: OutboxMessage,
+  ): Promise<LeadEvent> {
+    const leadEventData = leadEvent.toJSON();
+    const outboxMessageData = outboxMessage.toJSON();
+
+    try {
+      const createdLeadEvent = await this.prisma.$transaction(async (transaction) => {
+        const created = await transaction.leadEvent.create({
+          data: {
+            id: leadEventData.id,
+            eventId: leadEventData.eventId,
+            eventType: leadEventData.eventType,
+            organizationId: leadEventData.organizationId,
+            campaignId: leadEventData.campaignId,
+            leadId: leadEventData.leadId,
+            occurredAt: leadEventData.occurredAt,
+            payload: leadEventData.payload,
+            correlationId: leadEventData.correlationId,
+            idempotencyKey: leadEventData.idempotencyKey,
+            createdAt: leadEventData.createdAt,
+          },
+        });
+
+        await transaction.outboxMessage.create({
+          data: {
+            id: outboxMessageData.id,
+            organizationId: outboxMessageData.organizationId,
+            aggregateId: outboxMessageData.aggregateId,
+            aggregateType: outboxMessageData.aggregateType,
+            eventType: outboxMessageData.eventType,
+            payload: outboxMessageData.payload,
+            status: outboxMessageData.status,
+            attempts: outboxMessageData.attempts,
+            occurredAt: outboxMessageData.occurredAt,
+            publishedAt: outboxMessageData.publishedAt,
+            lastError: outboxMessageData.lastError,
+            correlationId: outboxMessageData.correlationId,
+            idempotencyKey: outboxMessageData.idempotencyKey,
+            createdAt: outboxMessageData.createdAt,
+            updatedAt: outboxMessageData.updatedAt,
+          },
+        });
+
+        return created;
+      });
+
+      return this.toDomain(createdLeadEvent);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existingLeadEvent = await this.findByOrganizationIdAndIdempotencyKey(
+          leadEventData.organizationId,
+          leadEventData.idempotencyKey,
         );
 
         if (existingLeadEvent) {

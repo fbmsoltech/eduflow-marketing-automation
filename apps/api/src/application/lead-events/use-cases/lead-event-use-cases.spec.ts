@@ -3,6 +3,7 @@ import { Campaign, CampaignStatus } from '../../../domain/campaigns/campaign.ent
 import { LeadEvent } from '../../../domain/lead-events/lead-event.entity';
 import { Lead, LeadStatus } from '../../../domain/leads/lead.entity';
 import { Organization } from '../../../domain/organizations/organization.entity';
+import { OutboxMessage } from '../../../domain/outbox/outbox-message.entity';
 import { CampaignNotFoundError } from '../../campaigns/errors';
 import { CampaignsRepository } from '../../campaigns/campaigns.repository';
 import { CampaignDoesNotBelongToOrganizationError, LeadNotFoundError } from '../../leads/errors';
@@ -159,6 +160,7 @@ class InMemoryLeadsRepository implements LeadsRepository {
 
 class InMemoryLeadEventsRepository implements LeadEventsRepository {
   readonly leadEvents: LeadEvent[] = [];
+  readonly outboxMessages: OutboxMessage[] = [];
 
   create(leadEvent: LeadEvent): Promise<LeadEvent> {
     const existingLeadEvent = this.leadEvents.find(
@@ -172,6 +174,23 @@ class InMemoryLeadEventsRepository implements LeadEventsRepository {
     }
 
     this.leadEvents.push(leadEvent);
+
+    return Promise.resolve(leadEvent);
+  }
+
+  createWithOutboxMessage(leadEvent: LeadEvent, outboxMessage: OutboxMessage): Promise<LeadEvent> {
+    const existingLeadEvent = this.leadEvents.find(
+      (item) =>
+        item.organizationId === leadEvent.organizationId &&
+        item.idempotencyKey === leadEvent.idempotencyKey,
+    );
+
+    if (existingLeadEvent) {
+      return Promise.resolve(existingLeadEvent);
+    }
+
+    this.leadEvents.push(leadEvent);
+    this.outboxMessages.push(outboxMessage);
 
     return Promise.resolve(leadEvent);
   }
@@ -286,6 +305,23 @@ describe('Lead event use cases', () => {
     expect(leadEvent.campaignId).toBe(campaign.id);
     expect(leadEvent.leadId).toBe(lead.id);
     expect(leadEvent.payload).toEqual({ formId: 'selection-2026' });
+    expect(leadEventsRepository.outboxMessages).toHaveLength(1);
+    expect(leadEventsRepository.outboxMessages[0]?.aggregateType).toBe('LeadEvent');
+    expect(leadEventsRepository.outboxMessages[0]?.aggregateId).toBe(leadEvent.id);
+    expect(leadEventsRepository.outboxMessages[0]?.eventType).toBe('form.submitted');
+    expect(leadEventsRepository.outboxMessages[0]?.status).toBe('PENDING');
+    expect(leadEventsRepository.outboxMessages[0]?.attempts).toBe(0);
+    expect(leadEventsRepository.outboxMessages[0]?.payload).toEqual({
+      eventId: leadEvent.eventId,
+      eventType: 'form.submitted',
+      organizationId: organization.id,
+      campaignId: campaign.id,
+      leadId: lead.id,
+      occurredAt: '2026-05-20T10:00:00.000Z',
+      correlationId: 'corr-123',
+      idempotencyKey: 'form.submitted:1',
+      payload: { formId: 'selection-2026' },
+    });
   });
 
   it('stores an empty object when payload is not informed', async () => {
@@ -339,6 +375,7 @@ describe('Lead event use cases', () => {
 
     expect(secondLeadEvent).toBe(firstLeadEvent);
     expect(leadEventsRepository.leadEvents).toHaveLength(1);
+    expect(leadEventsRepository.outboxMessages).toHaveLength(1);
   });
 
   it('does not register an event when organization does not exist', async () => {

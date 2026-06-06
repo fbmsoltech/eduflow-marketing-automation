@@ -10,6 +10,7 @@ import {
   OrganizationsRepository,
 } from '../../organizations/organizations.repository';
 import { LeadEvent, LeadEventPayload } from '../../../domain/lead-events/lead-event.entity';
+import { OutboxMessage, OutboxMessagePayload } from '../../../domain/outbox/outbox-message.entity';
 import { LeadDoesNotBelongToCampaignError, LeadDoesNotBelongToOrganizationError } from '../errors';
 import { LEAD_EVENTS_REPOSITORY, LeadEventsRepository } from '../lead-events.repository';
 
@@ -94,6 +95,32 @@ export class RegisterLeadEventUseCase {
       idempotencyKey: input.idempotencyKey,
     });
 
-    return this.leadEventsRepository.create(leadEvent);
+    const outboxMessage = OutboxMessage.create({
+      id: randomUUID(),
+      organizationId: leadEvent.organizationId,
+      aggregateId: leadEvent.id,
+      aggregateType: 'LeadEvent',
+      eventType: leadEvent.eventType,
+      payload: this.createOutboxPayload(leadEvent),
+      occurredAt: leadEvent.occurredAt,
+      correlationId: leadEvent.correlationId,
+      idempotencyKey: leadEvent.idempotencyKey,
+    });
+
+    return this.leadEventsRepository.createWithOutboxMessage(leadEvent, outboxMessage);
+  }
+
+  private createOutboxPayload(leadEvent: LeadEvent): OutboxMessagePayload {
+    return {
+      eventId: leadEvent.eventId,
+      eventType: leadEvent.eventType,
+      organizationId: leadEvent.organizationId,
+      campaignId: leadEvent.campaignId ?? null,
+      leadId: leadEvent.leadId ?? null,
+      occurredAt: leadEvent.occurredAt.toISOString(),
+      correlationId: leadEvent.correlationId ?? null,
+      idempotencyKey: leadEvent.idempotencyKey,
+      payload: leadEvent.payload,
+    };
   }
 }
