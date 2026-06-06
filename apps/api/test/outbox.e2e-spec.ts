@@ -16,11 +16,16 @@ import {
   ORGANIZATIONS_REPOSITORY,
   OrganizationsRepository,
 } from '../src/application/organizations/organizations.repository';
+import {
+  OUTBOX_MESSAGES_REPOSITORY,
+  OutboxMessagesRepository,
+} from '../src/application/outbox/outbox-messages.repository';
 import { AppModule } from '../src/app.module';
 import { Campaign, CampaignStatus } from '../src/domain/campaigns/campaign.entity';
-import { LeadEvent, LeadEventPayload } from '../src/domain/lead-events/lead-event.entity';
+import { LeadEvent } from '../src/domain/lead-events/lead-event.entity';
 import { Lead, LeadStatus } from '../src/domain/leads/lead.entity';
 import { Organization } from '../src/domain/organizations/organization.entity';
+import { OutboxMessage, OutboxMessagePayload } from '../src/domain/outbox/outbox-message.entity';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
 
 class InMemoryOrganizationsRepository implements OrganizationsRepository {
@@ -144,12 +149,7 @@ class InMemoryLeadsRepository implements LeadsRepository {
       return Promise.resolve(null);
     }
 
-    const updatedLead = Lead.restore({
-      ...lead.toJSON(),
-      status,
-      updatedAt: new Date(),
-    });
-
+    const updatedLead = Lead.restore({ ...lead.toJSON(), status, updatedAt: new Date() });
     this.leads.set(id, updatedLead);
 
     return Promise.resolve(updatedLead);
@@ -162,20 +162,35 @@ class InMemoryLeadsRepository implements LeadsRepository {
       return Promise.resolve(null);
     }
 
-    const updatedLead = Lead.restore({
-      ...lead.toJSON(),
-      score,
-      updatedAt: new Date(),
-    });
-
+    const updatedLead = Lead.restore({ ...lead.toJSON(), score, updatedAt: new Date() });
     this.leads.set(id, updatedLead);
 
     return Promise.resolve(updatedLead);
   }
 }
 
+class InMemoryOutboxMessagesRepository implements OutboxMessagesRepository {
+  private readonly outboxMessages = new Map<string, OutboxMessage>();
+
+  create(outboxMessage: OutboxMessage): Promise<OutboxMessage> {
+    this.outboxMessages.set(outboxMessage.id, outboxMessage);
+
+    return Promise.resolve(outboxMessage);
+  }
+
+  findById(id: string): Promise<OutboxMessage | null> {
+    return Promise.resolve(this.outboxMessages.get(id) ?? null);
+  }
+
+  list(): Promise<OutboxMessage[]> {
+    return Promise.resolve(Array.from(this.outboxMessages.values()));
+  }
+}
+
 class InMemoryLeadEventsRepository implements LeadEventsRepository {
   private readonly leadEvents = new Map<string, LeadEvent>();
+
+  constructor(private readonly outboxMessagesRepository: InMemoryOutboxMessagesRepository) {}
 
   create(leadEvent: LeadEvent): Promise<LeadEvent> {
     const existingLeadEvent = Array.from(this.leadEvents.values()).find(
@@ -193,8 +208,24 @@ class InMemoryLeadEventsRepository implements LeadEventsRepository {
     return Promise.resolve(leadEvent);
   }
 
-  createWithOutboxMessage(leadEvent: LeadEvent): Promise<LeadEvent> {
-    return this.create(leadEvent);
+  async createWithOutboxMessage(
+    leadEvent: LeadEvent,
+    outboxMessage: OutboxMessage,
+  ): Promise<LeadEvent> {
+    const existingLeadEvent = Array.from(this.leadEvents.values()).find(
+      (item) =>
+        item.organizationId === leadEvent.organizationId &&
+        item.idempotencyKey === leadEvent.idempotencyKey,
+    );
+
+    if (existingLeadEvent) {
+      return existingLeadEvent;
+    }
+
+    this.leadEvents.set(leadEvent.id, leadEvent);
+    await this.outboxMessagesRepository.create(outboxMessage);
+
+    return leadEvent;
   }
 
   findById(id: string): Promise<LeadEvent | null> {
@@ -241,44 +272,49 @@ class InMemoryLeadEventsRepository implements LeadEventsRepository {
   }
 }
 
-interface LeadEventResponseBody {
+interface OutboxMessageResponseBody {
   id: string;
-  eventId: string;
+  organizationId?: string;
+  aggregateId: string;
+  aggregateType: string;
   eventType: string;
-  organizationId: string;
-  campaignId?: string;
-  leadId?: string;
+  payload: OutboxMessagePayload;
+  status: string;
+  attempts: number;
   occurredAt: string;
-  payload: LeadEventPayload;
   correlationId?: string;
-  idempotencyKey: string;
+  idempotencyKey?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isLeadEventResponseBody(value: unknown): value is LeadEventResponseBody {
+function isOutboxMessageResponseBody(value: unknown): value is OutboxMessageResponseBody {
   return (
     isRecord(value) &&
     typeof value['id'] === 'string' &&
-    typeof value['eventId'] === 'string' &&
+    typeof value['aggregateId'] === 'string' &&
+    typeof value['aggregateType'] === 'string' &&
     typeof value['eventType'] === 'string' &&
-    typeof value['organizationId'] === 'string' &&
-    typeof value['occurredAt'] === 'string' &&
     isRecord(value['payload']) &&
-    typeof value['idempotencyKey'] === 'string' &&
-    typeof value['createdAt'] === 'string'
+    typeof value['status'] === 'string' &&
+    typeof value['attempts'] === 'number' &&
+    typeof value['occurredAt'] === 'string' &&
+    typeof value['createdAt'] === 'string' &&
+    typeof value['updatedAt'] === 'string'
   );
 }
 
-describe('Lead events endpoints', () => {
+describe('Outbox endpoints', () => {
   let app: INestApplication;
   let organizationsRepository: InMemoryOrganizationsRepository;
   let campaignsRepository: InMemoryCampaignsRepository;
   let leadsRepository: InMemoryLeadsRepository;
   let leadEventsRepository: InMemoryLeadEventsRepository;
+  let outboxMessagesRepository: InMemoryOutboxMessagesRepository;
   let organization: Organization;
   let campaign: Campaign;
   let lead: Lead;
@@ -287,7 +323,8 @@ describe('Lead events endpoints', () => {
     organizationsRepository = new InMemoryOrganizationsRepository();
     campaignsRepository = new InMemoryCampaignsRepository();
     leadsRepository = new InMemoryLeadsRepository();
-    leadEventsRepository = new InMemoryLeadEventsRepository();
+    outboxMessagesRepository = new InMemoryOutboxMessagesRepository();
+    leadEventsRepository = new InMemoryLeadEventsRepository(outboxMessagesRepository);
     organization = await organizationsRepository.create(
       Organization.create({
         id: randomUUID(),
@@ -323,6 +360,8 @@ describe('Lead events endpoints', () => {
       .useValue(leadsRepository)
       .overrideProvider(LEAD_EVENTS_REPOSITORY)
       .useValue(leadEventsRepository)
+      .overrideProvider(OUTBOX_MESSAGES_REPOSITORY)
+      .useValue(outboxMessagesRepository)
       .overrideProvider(PrismaService)
       .useValue({
         $connect: () => Promise.resolve(),
@@ -340,10 +379,10 @@ describe('Lead events endpoints', () => {
     }
   });
 
-  it('registers a lead event', async () => {
+  it('lists outbox messages created by lead event registration', async () => {
     const httpServer = app.getHttpServer() as Server;
 
-    const response = await request(httpServer)
+    await request(httpServer)
       .post('/lead-events')
       .send({
         organizationId: organization.id,
@@ -354,178 +393,102 @@ describe('Lead events endpoints', () => {
         payload: { formId: 'selection-2026' },
         correlationId: 'corr-123',
         idempotencyKey: 'form.submitted:1',
-      });
+      })
+      .expect(201);
 
-    expect(response.status).toBe(201);
-
+    const response = await request(httpServer).get('/outbox/messages').expect(200);
     const body: unknown = response.body;
 
-    expect(isLeadEventResponseBody(body)).toBe(true);
+    expect(Array.isArray(body)).toBe(true);
 
-    if (!isLeadEventResponseBody(body)) {
-      throw new Error('Expected lead event response body');
+    if (!Array.isArray(body) || !isOutboxMessageResponseBody(body[0])) {
+      throw new Error('Expected outbox message response list');
     }
 
-    expect(body.organizationId).toBe(organization.id);
-    expect(body.campaignId).toBe(campaign.id);
-    expect(body.leadId).toBe(lead.id);
-    expect(body.eventType).toBe('form.submitted');
-    expect(body.occurredAt).toBe('2026-05-20T10:00:00.000Z');
-    expect(body.payload).toEqual({ formId: 'selection-2026' });
-    expect(body.correlationId).toBe('corr-123');
-    expect(body.idempotencyKey).toBe('form.submitted:1');
-  });
-
-  it('returns the existing event for duplicated organization idempotency key', async () => {
-    const httpServer = app.getHttpServer() as Server;
-    const payload = {
-      organizationId: organization.id,
-      eventType: 'email.opened',
-      occurredAt: '2026-05-20T10:00:00.000Z',
-      idempotencyKey: 'email.opened:1',
-    };
-
-    const firstResponse = await request(httpServer).post('/lead-events').send(payload).expect(201);
-    const secondResponse = await request(httpServer)
-      .post('/lead-events')
-      .send({ ...payload, eventType: 'email.clicked' })
-      .expect(201);
-
-    expect((secondResponse.body as LeadEventResponseBody).id).toBe(
-      (firstResponse.body as LeadEventResponseBody).id,
-    );
-  });
-
-  it('stores empty payload when payload is not informed', async () => {
-    const httpServer = app.getHttpServer() as Server;
-
-    const response = await request(httpServer)
-      .post('/lead-events')
-      .send({
-        organizationId: organization.id,
-        eventType: 'email.opened',
-        occurredAt: '2026-05-20T10:00:00.000Z',
-        idempotencyKey: 'email.opened:1',
-      })
-      .expect(201);
-
-    expect((response.body as LeadEventResponseBody).payload).toEqual({});
-  });
-
-  it('rejects invalid request payload', async () => {
-    const httpServer = app.getHttpServer() as Server;
-
-    await request(httpServer)
-      .post('/lead-events')
-      .send({
-        organizationId: organization.id,
-        eventType: '',
-        occurredAt: 'invalid-date',
-        idempotencyKey: '',
-      })
-      .expect(400);
-  });
-
-  it('returns not found when organization does not exist', async () => {
-    const httpServer = app.getHttpServer() as Server;
-
-    await request(httpServer)
-      .post('/lead-events')
-      .send({
-        organizationId: randomUUID(),
-        eventType: 'form.submitted',
-        occurredAt: '2026-05-20T10:00:00.000Z',
-        idempotencyKey: 'form.submitted:1',
-      })
-      .expect(404);
-  });
-
-  it('returns not found when lead event does not exist', async () => {
-    const httpServer = app.getHttpServer() as Server;
-
-    await request(httpServer).get(`/lead-events/${randomUUID()}`).expect(404);
-  });
-
-  it('lists and finds lead events', async () => {
-    const httpServer = app.getHttpServer() as Server;
-    const leadEvent = await leadEventsRepository.create(
-      LeadEvent.create({
-        id: randomUUID(),
-        eventId: randomUUID(),
-        organizationId: organization.id,
-        campaignId: campaign.id,
-        leadId: lead.id,
-        eventType: 'email.clicked',
-        occurredAt: new Date('2026-05-20T10:00:00.000Z'),
-        idempotencyKey: 'email.clicked:1',
-      }),
-    );
-
-    const listResponse = await request(httpServer).get('/lead-events').expect(200);
-    const findResponse = await request(httpServer).get(`/lead-events/${leadEvent.id}`).expect(200);
-
-    const listBody: unknown = listResponse.body;
-
-    expect(Array.isArray(listBody)).toBe(true);
-    expect(findResponse.body as unknown).toEqual({
-      id: leadEvent.id,
-      eventId: leadEvent.eventId,
-      eventType: 'email.clicked',
+    expect(body).toHaveLength(1);
+    expect(body[0].aggregateType).toBe('LeadEvent');
+    expect(body[0].eventType).toBe('form.submitted');
+    expect(body[0].status).toBe('PENDING');
+    expect(body[0].attempts).toBe(0);
+    expect(body[0].occurredAt).toBe('2026-05-20T10:00:00.000Z');
+    expect(body[0].correlationId).toBe('corr-123');
+    expect(body[0].idempotencyKey).toBe('form.submitted:1');
+    expect(body[0].payload).toMatchObject({
+      eventType: 'form.submitted',
       organizationId: organization.id,
       campaignId: campaign.id,
       leadId: lead.id,
-      occurredAt: leadEvent.occurredAt.toISOString(),
-      payload: {},
-      idempotencyKey: 'email.clicked:1',
-      createdAt: leadEvent.createdAt.toISOString(),
+      occurredAt: '2026-05-20T10:00:00.000Z',
+      correlationId: 'corr-123',
+      idempotencyKey: 'form.submitted:1',
+      payload: { formId: 'selection-2026' },
     });
   });
 
-  it('lists lead events by organization, campaign and lead', async () => {
+  it('finds an outbox message by id', async () => {
     const httpServer = app.getHttpServer() as Server;
-
-    await leadEventsRepository.create(
-      LeadEvent.create({
+    const outboxMessage = await outboxMessagesRepository.create(
+      OutboxMessage.create({
         id: randomUUID(),
-        eventId: randomUUID(),
         organizationId: organization.id,
-        campaignId: campaign.id,
-        leadId: lead.id,
-        eventType: 'whatsapp.link_clicked',
+        aggregateId: randomUUID(),
+        aggregateType: 'LeadEvent',
+        eventType: 'email.opened',
+        payload: {
+          eventId: randomUUID(),
+          eventType: 'email.opened',
+          organizationId: organization.id,
+          campaignId: null,
+          leadId: null,
+          occurredAt: '2026-05-20T10:00:00.000Z',
+          correlationId: null,
+          idempotencyKey: 'email.opened:1',
+          payload: {},
+        },
         occurredAt: new Date('2026-05-20T10:00:00.000Z'),
-        idempotencyKey: 'whatsapp.link_clicked:1',
+        idempotencyKey: 'email.opened:1',
       }),
     );
 
-    const organizationResponse = await request(httpServer)
-      .get(`/organizations/${organization.id}/lead-events`)
+    const response = await request(httpServer)
+      .get(`/outbox/messages/${outboxMessage.id}`)
       .expect(200);
-    const campaignResponse = await request(httpServer)
-      .get(`/campaigns/${campaign.id}/lead-events`)
-      .expect(200);
-    const leadResponse = await request(httpServer).get(`/leads/${lead.id}/lead-events`).expect(200);
 
-    const organizationBody: unknown = organizationResponse.body;
-    const campaignBody: unknown = campaignResponse.body;
-    const leadBody: unknown = leadResponse.body;
+    expect(response.body as unknown).toMatchObject({
+      id: outboxMessage.id,
+      aggregateType: 'LeadEvent',
+      eventType: 'email.opened',
+      status: 'PENDING',
+      attempts: 0,
+      idempotencyKey: 'email.opened:1',
+    });
+  });
 
-    expect(Array.isArray(organizationBody)).toBe(true);
-    expect(Array.isArray(campaignBody)).toBe(true);
-    expect(Array.isArray(leadBody)).toBe(true);
+  it('does not create duplicate outbox messages for an idempotent lead event retry', async () => {
+    const httpServer = app.getHttpServer() as Server;
+    const payload = {
+      organizationId: organization.id,
+      eventType: 'email.clicked',
+      occurredAt: '2026-05-20T10:00:00.000Z',
+      idempotencyKey: 'email.clicked:1',
+    };
 
-    if (
-      !Array.isArray(organizationBody) ||
-      !isLeadEventResponseBody(organizationBody[0]) ||
-      !Array.isArray(campaignBody) ||
-      !isLeadEventResponseBody(campaignBody[0]) ||
-      !Array.isArray(leadBody) ||
-      !isLeadEventResponseBody(leadBody[0])
-    ) {
-      throw new Error('Expected lead event response lists');
-    }
+    await request(httpServer).post('/lead-events').send(payload).expect(201);
+    await request(httpServer)
+      .post('/lead-events')
+      .send({ ...payload, eventType: 'email.opened' })
+      .expect(201);
 
-    expect(organizationBody[0].organizationId).toBe(organization.id);
-    expect(campaignBody[0].campaignId).toBe(campaign.id);
-    expect(leadBody[0].leadId).toBe(lead.id);
+    const response = await request(httpServer).get('/outbox/messages').expect(200);
+    const body: unknown = response.body;
+
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(1);
+  });
+
+  it('returns not found when outbox message does not exist', async () => {
+    const httpServer = app.getHttpServer() as Server;
+
+    await request(httpServer).get(`/outbox/messages/${randomUUID()}`).expect(404);
   });
 });
