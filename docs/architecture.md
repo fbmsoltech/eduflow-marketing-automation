@@ -156,6 +156,24 @@ Example: a lead is created from an academic selection campaign.
 9. Metrics and logs are emitted.
 ```
 
+## Automation Engine Current Scope
+
+The initial automation engine supports automation flow registration and manual evaluation through
+the REST API.
+
+Current behavior:
+
+- automation flows are created as `DRAFT` and can be activated explicitly;
+- active flows are selected by organization, campaign scope and lead event type;
+- conditions are evaluated with AND logic using event, lead, campaign and organization fields;
+- internal actions can update lead score, update lead status and create tasks;
+- each matched flow creates an execution that finishes as `SUCCEEDED` or `FAILED`;
+- unsupported webhook and notification actions fail with a clear execution error.
+
+Evaluation is currently triggered manually through `POST /automations/evaluate`. RabbitMQ
+consumption, an automation worker, Redis usage and real webhook or notification dispatch remain
+planned for later phases.
+
 ## Main Domain Events
 
 ```txt
