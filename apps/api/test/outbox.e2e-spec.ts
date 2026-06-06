@@ -11,6 +11,11 @@ import {
   LEAD_EVENTS_REPOSITORY,
   LeadEventsRepository,
 } from '../src/application/lead-events/lead-events.repository';
+import {
+  MESSAGE_BROKER,
+  MessageBroker,
+  PublishMessageInput,
+} from '../src/application/messaging/message-broker';
 import { LEADS_REPOSITORY, LeadsRepository } from '../src/application/leads/leads.repository';
 import {
   ORGANIZATIONS_REPOSITORY,
@@ -185,6 +190,58 @@ class InMemoryOutboxMessagesRepository implements OutboxMessagesRepository {
   list(): Promise<OutboxMessage[]> {
     return Promise.resolve(Array.from(this.outboxMessages.values()));
   }
+
+  listPending(limit: number): Promise<OutboxMessage[]> {
+    return Promise.resolve(
+      Array.from(this.outboxMessages.values())
+        .filter((outboxMessage) => outboxMessage.status === 'PENDING')
+        .slice(0, limit),
+    );
+  }
+
+  markAsPublished(id: string, publishedAt: Date): Promise<void> {
+    this.update(id, {
+      status: 'PUBLISHED',
+      publishedAt,
+      lastError: undefined,
+    });
+
+    return Promise.resolve();
+  }
+
+  markAsFailed(id: string, lastError: string): Promise<void> {
+    this.update(id, { status: 'FAILED', lastError });
+
+    return Promise.resolve();
+  }
+
+  private update(id: string, changes: Partial<ReturnType<OutboxMessage['toJSON']>>): void {
+    const current = this.outboxMessages.get(id);
+
+    if (!current) {
+      return;
+    }
+
+    this.outboxMessages.set(
+      id,
+      OutboxMessage.restore({
+        ...current.toJSON(),
+        ...changes,
+        attempts: current.attempts + 1,
+        updatedAt: new Date(),
+      }),
+    );
+  }
+}
+
+class InMemoryMessageBroker implements MessageBroker {
+  readonly publishedMessages: PublishMessageInput[] = [];
+
+  publish(input: PublishMessageInput): Promise<void> {
+    this.publishedMessages.push(input);
+
+    return Promise.resolve();
+  }
 }
 
 class InMemoryLeadEventsRepository implements LeadEventsRepository {
@@ -315,6 +372,7 @@ describe('Outbox endpoints', () => {
   let leadsRepository: InMemoryLeadsRepository;
   let leadEventsRepository: InMemoryLeadEventsRepository;
   let outboxMessagesRepository: InMemoryOutboxMessagesRepository;
+  let messageBroker: InMemoryMessageBroker;
   let organization: Organization;
   let campaign: Campaign;
   let lead: Lead;
@@ -324,6 +382,7 @@ describe('Outbox endpoints', () => {
     campaignsRepository = new InMemoryCampaignsRepository();
     leadsRepository = new InMemoryLeadsRepository();
     outboxMessagesRepository = new InMemoryOutboxMessagesRepository();
+    messageBroker = new InMemoryMessageBroker();
     leadEventsRepository = new InMemoryLeadEventsRepository(outboxMessagesRepository);
     organization = await organizationsRepository.create(
       Organization.create({
@@ -362,6 +421,8 @@ describe('Outbox endpoints', () => {
       .useValue(leadEventsRepository)
       .overrideProvider(OUTBOX_MESSAGES_REPOSITORY)
       .useValue(outboxMessagesRepository)
+      .overrideProvider(MESSAGE_BROKER)
+      .useValue(messageBroker)
       .overrideProvider(PrismaService)
       .useValue({
         $connect: () => Promise.resolve(),
@@ -490,5 +551,47 @@ describe('Outbox endpoints', () => {
     const httpServer = app.getHttpServer() as Server;
 
     await request(httpServer).get(`/outbox/messages/${randomUUID()}`).expect(404);
+  });
+
+  it('publishes pending outbox messages and returns a processing summary', async () => {
+    const httpServer = app.getHttpServer() as Server;
+    const outboxMessage = await outboxMessagesRepository.create(
+      OutboxMessage.create({
+        id: randomUUID(),
+        organizationId: organization.id,
+        aggregateId: randomUUID(),
+        aggregateType: 'LeadEvent',
+        eventType: 'form.submitted',
+        payload: { eventId: randomUUID() },
+        occurredAt: new Date('2026-05-20T10:00:00.000Z'),
+      }),
+    );
+
+    await request(httpServer)
+      .post('/outbox/messages/publish')
+      .send({ limit: 1 })
+      .expect(201)
+      .expect({
+        processed: 1,
+        published: 1,
+        failed: 0,
+      });
+
+    expect(messageBroker.publishedMessages[0]).toMatchObject({
+      messageId: outboxMessage.id,
+      routingKey: 'lead-events.form.submitted',
+      eventType: 'form.submitted',
+    });
+
+    const publishedMessage = await outboxMessagesRepository.findById(outboxMessage.id);
+    expect(publishedMessage?.status).toBe('PUBLISHED');
+    expect(publishedMessage?.attempts).toBe(1);
+    expect(publishedMessage?.publishedAt).toBeInstanceOf(Date);
+  });
+
+  it('rejects an invalid outbox publish limit', async () => {
+    const httpServer = app.getHttpServer() as Server;
+
+    await request(httpServer).post('/outbox/messages/publish').send({ limit: 0 }).expect(400);
   });
 });

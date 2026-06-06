@@ -28,6 +28,7 @@
     "@nestjs/platform-express": "^11.1.20",
     "@prisma/adapter-pg": "^6.19.3",
     "@prisma/client": "^6.19.3",
+    "amqplib": "^2.0.1",
     "pg": "^8.21.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
@@ -38,6 +39,7 @@
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.21",
     "@nestjs/testing": "^11.1.20",
+    "@types/amqplib": "^0.10.8",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
@@ -64,5 +66,11 @@
       "prettier --write"
     ],
     "*.{js,mjs,cjs,json,md,yml,yaml}": "prettier --write"
+  },
+  "allowScripts": {
+    "@nestjs/core@11.1.20": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true
   }
 }

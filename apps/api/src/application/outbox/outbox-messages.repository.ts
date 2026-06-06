@@ -6,4 +6,7 @@ export interface OutboxMessagesRepository {
   create(outboxMessage: OutboxMessage): Promise<OutboxMessage>;
   findById(id: string): Promise<OutboxMessage | null>;
   list(): Promise<OutboxMessage[]>;
+  listPending(limit: number): Promise<OutboxMessage[]>;
+  markAsPublished(id: string, publishedAt: Date): Promise<void>;
+  markAsFailed(id: string, lastError: string): Promise<void>;
 }

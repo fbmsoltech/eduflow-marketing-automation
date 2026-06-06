@@ -25,6 +25,9 @@ Copy `.env.example` to `.env` when local application configuration is needed.
 DATABASE_URL=postgresql://eduflow:eduflow@localhost:5432/eduflow
 REDIS_URL=redis://localhost:6379
 RABBITMQ_URL=amqp://eduflow:eduflow@localhost:5672
+RABBITMQ_EXCHANGE=eduflow.events
+RABBITMQ_EXCHANGE_TYPE=topic
+OUTBOX_PUBLISH_LIMIT=100
 ```
 
 Prisma commands read `DATABASE_URL` from the local environment. For the default local setup, copy `.env.example` to `.env` before running migrations.
@@ -59,6 +62,33 @@ Open RabbitMQ Management UI:
 ```txt
 http://localhost:15672
 ```
+
+## Publish Pending Outbox Messages
+
+With PostgreSQL, RabbitMQ and the API running, manually publish pending outbox messages:
+
+```bash
+curl -X POST http://localhost:3000/outbox/messages/publish \
+  -H "Content-Type: application/json" \
+  -d "{\"limit\":10}"
+```
+
+The optional `limit` overrides `OUTBOX_PUBLISH_LIMIT` for that request. Messages are published
+to the durable topic exchange configured by `RABBITMQ_EXCHANGE`, using routing keys in the
+`lead-events.<eventType>` format.
+
+The endpoint returns:
+
+```json
+{
+  "processed": 1,
+  "published": 1,
+  "failed": 0
+}
+```
+
+After a successful publication, inspect `GET /outbox/messages` to confirm that the message is
+`PUBLISHED`, `publishedAt` is filled and `attempts` was incremented.
 
 ## Database Migrations
 
