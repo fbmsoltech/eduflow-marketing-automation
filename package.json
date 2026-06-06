@@ -15,6 +15,8 @@
     "prisma:studio": "prisma studio",
     "start": "node dist/apps/api/main.js",
     "start:dev": "nest start api --watch",
+    "start:worker:outbox": "ts-node apps/api/src/workers/outbox-publisher/main.ts",
+    "start:worker:outbox:prod": "node dist/apps/api/workers/outbox-publisher/main.js",
     "lint": "eslint \"apps/**/*.ts\" --max-warnings 0",
     "format": "prettier --write \"**/*.{ts,js,mjs,cjs,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,js,mjs,cjs,json,md,yml,yaml}\"",
