@@ -17,6 +17,8 @@
     "start:dev": "nest start api --watch",
     "start:worker:outbox": "ts-node apps/api/src/workers/outbox-publisher/main.ts",
     "start:worker:outbox:prod": "node dist/apps/api/workers/outbox-publisher/main.js",
+    "start:worker:automation": "ts-node apps/api/src/workers/automation/main.ts",
+    "start:worker:automation:prod": "node dist/apps/api/workers/automation/main.js",
     "lint": "eslint \"apps/**/*.ts\" --max-warnings 0",
     "format": "prettier --write \"**/*.{ts,js,mjs,cjs,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,js,mjs,cjs,json,md,yml,yaml}\"",

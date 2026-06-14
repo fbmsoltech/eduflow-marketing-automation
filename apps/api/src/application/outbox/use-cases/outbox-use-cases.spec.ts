@@ -141,6 +141,15 @@ describe('Outbox use cases', () => {
       routingKey: 'lead-events.form.submitted',
       eventType: 'form.submitted',
       correlationId: 'corr-123',
+      payload: {
+        messageId: outboxMessage.id,
+        eventType: outboxMessage.eventType,
+        aggregateType: outboxMessage.aggregateType,
+        aggregateId: outboxMessage.aggregateId,
+        occurredAt: outboxMessage.occurredAt.toISOString(),
+        correlationId: outboxMessage.correlationId,
+        payload: outboxMessage.payload,
+      },
     });
 
     const publishedMessage = await repository.findById(outboxMessage.id);
