@@ -170,9 +170,10 @@ Current behavior:
 - each matched flow creates an execution that finishes as `SUCCEEDED` or `FAILED`;
 - unsupported webhook and notification actions fail with a clear execution error.
 
-Evaluation is currently triggered manually through `POST /automations/evaluate`. RabbitMQ
-consumption, an automation worker, Redis usage and real webhook or notification dispatch remain
-planned for later phases.
+Evaluation can be triggered manually through `POST /automations/evaluate` or automatically by the
+Automation Worker. The worker consumes LeadEvent outbox messages from RabbitMQ and invokes the same
+Automation Engine use case. Redis usage, advanced retries, dead-letter handling and real webhook or
+notification dispatch remain planned for later phases.
 
 ## Main Domain Events
 
@@ -252,7 +253,10 @@ Current implementation scope:
 - `POST /outbox/messages/publish` manually publishes a limited batch of `PENDING` messages to the durable `eduflow.events` topic exchange.
 - Lead event messages use routing keys in the `lead-events.<eventType>` format.
 - Successful publications are marked as `PUBLISHED`; failed publications are marked as `FAILED`.
-- Consumers, automatic scheduling, retries and dead-letter handling remain planned for later phases.
+- The Outbox Publisher Worker automatically schedules message publication.
+- The Automation Worker consumes `lead-events.#` messages from the durable
+  `eduflow.automation.events` queue.
+- Advanced retries and dead-letter handling remain planned for later phases.
 
 ## Retry and Dead Letter Strategy
 

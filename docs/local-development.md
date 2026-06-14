@@ -30,6 +30,10 @@ RABBITMQ_EXCHANGE_TYPE=topic
 OUTBOX_PUBLISHER_ENABLED=true
 OUTBOX_PUBLISHER_INTERVAL_MS=5000
 OUTBOX_PUBLISH_LIMIT=100
+AUTOMATION_WORKER_ENABLED=true
+AUTOMATION_WORKER_QUEUE=eduflow.automation.events
+AUTOMATION_WORKER_BINDING_KEY=lead-events.#
+AUTOMATION_WORKER_PREFETCH=10
 ```
 
 Prisma commands read `DATABASE_URL` from the local environment. For the default local setup, copy `.env.example` to `.env` before running migrations.
@@ -111,6 +115,37 @@ To run the compiled worker after `npm run build`:
 
 ```bash
 npm run start:worker:outbox:prod
+```
+
+## Run the Automation Worker
+
+With PostgreSQL and RabbitMQ running, start the automation worker:
+
+```bash
+npm run start:worker:automation
+```
+
+The worker runs as a NestJS application context without opening an HTTP server. When
+`AUTOMATION_WORKER_ENABLED=true`, it declares the durable `eduflow.events` topic exchange, declares
+the durable queue configured by `AUTOMATION_WORKER_QUEUE`, binds it using
+`AUTOMATION_WORKER_BINDING_KEY` and consumes messages using `AUTOMATION_WORKER_PREFETCH`.
+
+The default queue is `eduflow.automation.events` and the default binding key is `lead-events.#`.
+Valid `LeadEvent` messages execute the Automation Engine using the message `aggregateId` as the lead
+event ID. Messages for another aggregate type are acknowledged and ignored.
+
+Invalid payloads and missing lead events are negatively acknowledged without requeue. Unexpected
+errors are negatively acknowledged with requeue. Advanced retries and dead-letter handling are not
+implemented in this phase.
+
+To validate the complete local flow, run the API, outbox publisher worker and automation worker in
+separate terminals. Register a lead event and confirm that its outbox message is published and then
+consumed by the automation worker.
+
+To run the compiled worker after `npm run build`:
+
+```bash
+npm run start:worker:automation:prod
 ```
 
 ## Database Migrations

@@ -35,7 +35,15 @@ export class PublishPendingOutboxMessagesUseCase {
           messageId: message.id,
           routingKey: `lead-events.${message.eventType}`,
           eventType: message.eventType,
-          payload: message.payload,
+          payload: {
+            messageId: message.id,
+            eventType: message.eventType,
+            aggregateType: message.aggregateType,
+            aggregateId: message.aggregateId,
+            occurredAt: message.occurredAt.toISOString(),
+            correlationId: message.correlationId ?? null,
+            payload: message.payload,
+          },
           correlationId: message.correlationId,
         });
         await this.outboxMessagesRepository.markAsPublished(message.id, new Date());
