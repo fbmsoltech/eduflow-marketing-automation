@@ -34,6 +34,9 @@ AUTOMATION_WORKER_ENABLED=true
 AUTOMATION_WORKER_QUEUE=eduflow.automation.events
 AUTOMATION_WORKER_BINDING_KEY=lead-events.#
 AUTOMATION_WORKER_PREFETCH=10
+WEBHOOK_TIMEOUT_MS=5000
+WEBHOOK_MAX_ATTEMPTS=3
+WEBHOOK_RETRY_DELAY_MS=1000
 ```
 
 Prisma commands read `DATABASE_URL` from the local environment. For the default local setup, copy `.env.example` to `.env` before running migrations.
@@ -135,8 +138,24 @@ Valid `LeadEvent` messages execute the Automation Engine using the message `aggr
 event ID. Messages for another aggregate type are acknowledged and ignored.
 
 Invalid payloads and missing lead events are negatively acknowledged without requeue. Unexpected
-errors are negatively acknowledged with requeue. Advanced retries and dead-letter handling are not
-implemented in this phase.
+errors are negatively acknowledged with requeue.
+
+`SEND_WEBHOOK` automation actions are delivered by the Automation Engine using native `fetch`.
+The action config requires `url`, defaults to `POST` and may include `method` and string-valued
+`headers`. Requests time out after `WEBHOOK_TIMEOUT_MS` and are attempted up to
+`WEBHOOK_MAX_ATTEMPTS`, waiting `WEBHOOK_RETRY_DELAY_MS` between attempts. HTTP 2xx responses are
+successful. Final failures create a pending `webhook.delivery_failed` record available through the
+Dead Letter endpoints.
+
+Inspect and ignore Dead Letter messages:
+
+```bash
+curl http://localhost:3000/dead-letter/messages
+curl http://localhost:3000/dead-letter/messages/<id>
+curl -X PATCH http://localhost:3000/dead-letter/messages/<id>/ignore
+```
+
+This phase does not automatically reprocess Dead Letter messages or schedule distributed retries.
 
 To validate the complete local flow, run the API, outbox publisher worker and automation worker in
 separate terminals. Register a lead event and confirm that its outbox message is published and then

@@ -168,12 +168,14 @@ Current behavior:
 - conditions are evaluated with AND logic using event, lead, campaign and organization fields;
 - internal actions can update lead score, update lead status and create tasks;
 - each matched flow creates an execution that finishes as `SUCCEEDED` or `FAILED`;
-- unsupported webhook and notification actions fail with a clear execution error.
+- webhook actions use native HTTP delivery with timeout and basic in-process retry;
+- final webhook failures create pending Dead Letter messages and fail the automation execution;
+- unsupported notification actions fail with a clear execution error.
 
 Evaluation can be triggered manually through `POST /automations/evaluate` or automatically by the
 Automation Worker. The worker consumes LeadEvent outbox messages from RabbitMQ and invokes the same
-Automation Engine use case. Redis usage, advanced retries, dead-letter handling and real webhook or
-notification dispatch remain planned for later phases.
+Automation Engine use case. Redis usage, distributed or scheduled retries, automatic Dead Letter
+reprocessing and real notification dispatch remain planned for later phases.
 
 ## Main Domain Events
 
@@ -273,6 +275,17 @@ Example retry policy:
 ```
 
 Dead-lettered messages should be stored with enough information for analysis and reprocessing.
+
+Current webhook delivery behavior:
+
+- `SEND_WEBHOOK` uses native `fetch` and an `AbortController` timeout;
+- HTTP 2xx responses are successful, while timeout, network errors and non-2xx responses fail;
+- delivery is attempted up to `WEBHOOK_MAX_ATTEMPTS` with a fixed
+  `WEBHOOK_RETRY_DELAY_MS` interval;
+- after the final failure, the automation execution is marked `FAILED` and a
+  `webhook.delivery_failed` record is stored in `dead_letter_messages`;
+- messages can be inspected and marked `IGNORED` through `/dead-letter/messages`;
+- automatic reprocessing and distributed retries are intentionally out of scope.
 
 ## Observability Strategy
 

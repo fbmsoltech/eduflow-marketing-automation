@@ -12,14 +12,24 @@ import { ListAutomationFlowsByOrganizationUseCase } from '../../application/auto
 import { UpdateAutomationFlowStatusUseCase } from '../../application/automations/use-cases/update-automation-flow-status.use-case';
 import { PrismaModule } from '../../infrastructure/prisma/prisma.module';
 import { PrismaAutomationsRepository } from '../../infrastructure/prisma/repositories/prisma-automations.repository';
+import { WebhooksModule } from '../../infrastructure/http/webhooks.module';
 import { CampaignsModule } from '../campaigns/campaigns.module';
+import { DeadLetterModule } from '../dead-letter/dead-letter.module';
 import { LeadEventsModule } from '../lead-events/lead-events.module';
 import { LeadsModule } from '../leads/leads.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
 import { AutomationsController } from './automations.controller';
 
 @Module({
-  imports: [PrismaModule, OrganizationsModule, CampaignsModule, LeadsModule, LeadEventsModule],
+  imports: [
+    PrismaModule,
+    OrganizationsModule,
+    CampaignsModule,
+    LeadsModule,
+    LeadEventsModule,
+    DeadLetterModule,
+    WebhooksModule,
+  ],
   controllers: [AutomationsController],
   providers: [
     CreateAutomationFlowUseCase,
