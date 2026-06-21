@@ -27,3 +27,14 @@ export class AutomationActionRequiresLeadError extends Error {
     super(`Automation action ${type} requires a lead`);
   }
 }
+
+export class WebhookDeliveryFailedError extends Error {
+  constructor(
+    message: string,
+    readonly attempts: number,
+    readonly statusCode?: number,
+  ) {
+    super(message);
+    this.name = 'WebhookDeliveryFailedError';
+  }
+}

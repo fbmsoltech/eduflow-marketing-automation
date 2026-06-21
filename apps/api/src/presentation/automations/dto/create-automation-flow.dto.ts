@@ -140,6 +140,8 @@ export class CreateAutomationFlowDto {
         this.validateCreateTaskConfig(config, field);
         return;
       case AutomationActionType.SEND_WEBHOOK:
+        this.validateSendWebhookConfig(config, field);
+        return;
       case AutomationActionType.SEND_NOTIFICATION:
         return;
     }
@@ -164,6 +166,33 @@ export class CreateAutomationFlowDto {
       (typeof config['dueAt'] !== 'string' || Number.isNaN(new Date(config['dueAt']).getTime()))
     ) {
       throw new BadRequestException(`${field}.dueAt must be an ISO date string`);
+    }
+  }
+
+  private static validateSendWebhookConfig(config: AutomationJsonObject, field: string): void {
+    if (typeof config['url'] !== 'string' || !this.isHttpUrl(config['url'])) {
+      throw new BadRequestException(`${field}.url must be a valid HTTP URL`);
+    }
+    if (
+      config['method'] !== undefined &&
+      (typeof config['method'] !== 'string' || !config['method'].trim())
+    ) {
+      throw new BadRequestException(`${field}.method must be a non-empty string`);
+    }
+    const headers = config['headers'];
+    if (
+      headers !== undefined &&
+      (!isRecord(headers) || Object.values(headers).some((value) => typeof value !== 'string'))
+    ) {
+      throw new BadRequestException(`${field}.headers must contain only string values`);
+    }
+  }
+
+  private static isHttpUrl(value: string): boolean {
+    try {
+      return ['http:', 'https:'].includes(new URL(value).protocol);
+    } catch {
+      return false;
     }
   }
 

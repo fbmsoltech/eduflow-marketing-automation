@@ -12,6 +12,7 @@ import { AutomationConditionEvaluatorService } from './automation-condition-eval
 import { AutomationFieldResolverService } from './automation-field-resolver.service';
 
 describe('Automation services', () => {
+  const originalEnvironment = process.env;
   const organizationId = randomUUID();
   const campaignId = randomUUID();
   const leadId = randomUUID();
@@ -38,6 +39,9 @@ describe('Automation services', () => {
     updateStatus: jest.fn().mockResolvedValue(lead),
   };
   const automationsRepository = { createTask: jest.fn().mockResolvedValue(undefined) };
+  const webhookClient = { send: jest.fn() };
+  const createDeadLetterMessageUseCase = { execute: jest.fn() };
+  const dispatchContext = { automationExecutionId: randomUUID() };
   const fieldResolver = new AutomationFieldResolverService(
     leadsRepository as never,
     { findById: jest.fn().mockResolvedValue({ slug: 'selection-2026' }) } as never,
@@ -47,9 +51,23 @@ describe('Automation services', () => {
   const dispatcher = new AutomationActionDispatcherService(
     automationsRepository as never,
     leadsRepository as never,
+    webhookClient,
+    createDeadLetterMessageUseCase as never,
   );
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    process.env = {
+      ...originalEnvironment,
+      WEBHOOK_MAX_ATTEMPTS: '3',
+      WEBHOOK_RETRY_DELAY_MS: '0',
+      WEBHOOK_TIMEOUT_MS: '50',
+    };
+    jest.clearAllMocks();
+  });
+
+  afterAll(() => {
+    process.env = originalEnvironment;
+  });
 
   it('resolves supported field paths and evaluates conditions with AND logic', async () => {
     const conditions = [
@@ -83,6 +101,7 @@ describe('Automation services', () => {
         config: { amount: 5 },
       }),
       event,
+      dispatchContext,
     );
     await dispatcher.dispatch(
       AutomationAction.create({
@@ -92,6 +111,7 @@ describe('Automation services', () => {
         config: { status: LeadStatus.QUALIFIED },
       }),
       event,
+      dispatchContext,
     );
     await dispatcher.dispatch(
       AutomationAction.create({
@@ -101,6 +121,7 @@ describe('Automation services', () => {
         config: { title: 'Call candidate', priority: 'HIGH' },
       }),
       event,
+      dispatchContext,
     );
 
     expect(leadsRepository.updateScore).toHaveBeenCalledWith(leadId, 5);
@@ -110,16 +131,79 @@ describe('Automation services', () => {
     );
   });
 
-  it('rejects unsupported actions', async () => {
+  it('rejects unsupported notification actions', async () => {
+    const action = AutomationAction.create({
+      id: randomUUID(),
+      flowId: randomUUID(),
+      type: AutomationActionType.SEND_NOTIFICATION,
+      config: {},
+    });
+
+    await expect(dispatcher.dispatch(action, event, dispatchContext)).rejects.toThrow(
+      'Automation action SEND_NOTIFICATION is not supported in this phase',
+    );
+  });
+
+  it('dispatches a webhook with contextual automation payload', async () => {
+    webhookClient.send.mockResolvedValue({ statusCode: 204 });
     const action = AutomationAction.create({
       id: randomUUID(),
       flowId: randomUUID(),
       type: AutomationActionType.SEND_WEBHOOK,
-      config: {},
+      config: { url: 'https://example.com/hooks', headers: { 'x-api-key': 'secret' } },
     });
 
-    await expect(dispatcher.dispatch(action, event)).rejects.toThrow(
-      'Automation action SEND_WEBHOOK is not supported in this phase',
+    await expect(dispatcher.dispatch(action, event, dispatchContext)).resolves.toBeUndefined();
+
+    expect(webhookClient.send).toHaveBeenCalledWith({
+      url: 'https://example.com/hooks',
+      method: 'POST',
+      headers: { 'x-api-key': 'secret' },
+      timeoutMs: 50,
+      payload: {
+        source: 'eduflow',
+        eventType: event.eventType,
+        organizationId,
+        campaignId,
+        leadId,
+        leadEventId: event.id,
+        automationFlowId: action.flowId,
+        automationExecutionId: dispatchContext.automationExecutionId,
+        occurredAt: event.occurredAt.toISOString(),
+        payload: event.payload,
+      },
+    });
+    expect(createDeadLetterMessageUseCase.execute).not.toHaveBeenCalled();
+  });
+
+  it('retries failed webhooks and creates a dead letter after the final attempt', async () => {
+    webhookClient.send
+      .mockRejectedValueOnce(new Error('Connection refused'))
+      .mockResolvedValueOnce({ statusCode: 503 })
+      .mockResolvedValueOnce({ statusCode: 500 });
+    const action = AutomationAction.create({
+      id: randomUUID(),
+      flowId: randomUUID(),
+      type: AutomationActionType.SEND_WEBHOOK,
+      config: { url: 'https://example.com/hooks' },
+    });
+
+    await expect(dispatcher.dispatch(action, event, dispatchContext)).rejects.toThrow(
+      'Webhook returned HTTP status 500',
+    );
+
+    expect(webhookClient.send).toHaveBeenCalledTimes(3);
+    expect(createDeadLetterMessageUseCase.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId,
+        eventType: 'webhook.delivery_failed',
+        reason: 'Webhook delivery failed after maximum attempts',
+        errorDetails: {
+          error: 'Webhook returned HTTP status 500',
+          statusCode: 500,
+          attempts: 3,
+        },
+      }),
     );
   });
 
@@ -131,7 +215,7 @@ describe('Automation services', () => {
       config: { value: 5 },
     });
 
-    await expect(dispatcher.dispatch(action, event)).rejects.toThrow(
+    await expect(dispatcher.dispatch(action, event, dispatchContext)).rejects.toThrow(
       'Invalid config for automation action INCREASE_LEAD_SCORE: amount must be a positive integer',
     );
   });

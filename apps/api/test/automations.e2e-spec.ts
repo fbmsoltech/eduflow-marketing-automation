@@ -162,6 +162,22 @@ describe('Automations endpoints', () => {
     );
   });
 
+  it('rejects invalid webhook configuration when creating a flow', async () => {
+    const response = await request(httpServer)
+      .post('/automations')
+      .send({
+        organizationId: organization.id,
+        name: 'Invalid webhook',
+        triggerEventType: 'form.submitted',
+        actions: [{ type: 'SEND_WEBHOOK', config: { url: 'ftp://example.com/hooks' } }],
+      })
+      .expect(400);
+
+    expect((response.body as { message: string }).message).toBe(
+      'actions[0].config.url must be a valid HTTP URL',
+    );
+  });
+
   function createAutomationsRepository() {
     return {
       create: (flow: AutomationFlow) => {

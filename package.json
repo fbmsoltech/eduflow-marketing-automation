@@ -71,6 +71,9 @@
     ],
     "*.{js,mjs,cjs,json,md,yml,yaml}": "prettier --write"
   },
+  "overrides": {
+    "multer": "2.2.0"
+  },
   "allowScripts": {
     "@nestjs/core@11.1.20": true,
     "@prisma/client@6.19.3": true,

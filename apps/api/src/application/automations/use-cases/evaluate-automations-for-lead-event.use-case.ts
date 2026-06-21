@@ -66,7 +66,9 @@ export class EvaluateAutomationsForLeadEventUseCase {
       );
 
       try {
-        await this.actionDispatcher.dispatchAll(flow.actions, event);
+        await this.actionDispatcher.dispatchAll(flow.actions, event, {
+          automationExecutionId: execution.id,
+        });
         execution = await this.automationsRepository.finishExecution(execution.id, 'SUCCEEDED');
         result.executedFlows += 1;
       } catch (error) {
