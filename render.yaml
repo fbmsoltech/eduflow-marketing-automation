@@ -1,0 +1,118 @@
+services:
+  - type: web
+    name: eduflow-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/apps/api/main.js
+    healthCheckPath: /health/live
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: APP_PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eduflow-postgres
+          property: connectionString
+      - key: RABBITMQ_URL
+        sync: false
+      - key: RABBITMQ_EXCHANGE
+        value: eduflow.events
+      - key: RABBITMQ_EXCHANGE_TYPE
+        value: topic
+      - key: WEBHOOK_TIMEOUT_MS
+        value: 5000
+      - key: WEBHOOK_MAX_ATTEMPTS
+        value: 3
+      - key: WEBHOOK_RETRY_DELAY_MS
+        value: 1000
+
+  - type: worker
+    name: eduflow-outbox-worker
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/apps/api/workers/outbox-publisher/main.js
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eduflow-postgres
+          property: connectionString
+      - key: RABBITMQ_URL
+        fromService:
+          type: web
+          name: eduflow-api
+          envVarKey: RABBITMQ_URL
+      - key: RABBITMQ_EXCHANGE
+        value: eduflow.events
+      - key: RABBITMQ_EXCHANGE_TYPE
+        value: topic
+      - key: OUTBOX_PUBLISHER_ENABLED
+        value: 'true'
+      - key: OUTBOX_PUBLISHER_INTERVAL_MS
+        value: 5000
+      - key: OUTBOX_PUBLISH_LIMIT
+        value: 100
+
+  - type: worker
+    name: eduflow-automation-worker
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/apps/api/workers/automation/main.js
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eduflow-postgres
+          property: connectionString
+      - key: RABBITMQ_URL
+        fromService:
+          type: web
+          name: eduflow-api
+          envVarKey: RABBITMQ_URL
+      - key: RABBITMQ_EXCHANGE
+        value: eduflow.events
+      - key: RABBITMQ_EXCHANGE_TYPE
+        value: topic
+      - key: AUTOMATION_WORKER_ENABLED
+        value: 'true'
+      - key: AUTOMATION_WORKER_QUEUE
+        value: eduflow.automation.events
+      - key: AUTOMATION_WORKER_BINDING_KEY
+        value: lead-events.#
+      - key: AUTOMATION_WORKER_PREFETCH
+        value: 10
+      - key: WEBHOOK_TIMEOUT_MS
+        value: 5000
+      - key: WEBHOOK_MAX_ATTEMPTS
+        value: 3
+      - key: WEBHOOK_RETRY_DELAY_MS
+        value: 1000
+
+databases:
+  - name: eduflow-postgres
+    plan: free
+    region: oregon
+    databaseName: eduflow
+    user: eduflow
+    postgresMajorVersion: '16'

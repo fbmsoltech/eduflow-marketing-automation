@@ -6,7 +6,7 @@ The project simulates a real-world scenario where organizations need to capture 
 
 ## Current Status
 
-Local infrastructure phase.
+Deployment phase with Render and CloudAMQP.
 
 ## Business Case
 
@@ -38,7 +38,8 @@ EduFlow provides a marketing automation engine where each lead interaction can t
 - Docker
 - Jest
 - GitHub Actions
-- Azure Container Apps
+- Render
+- CloudAMQP
 
 ## Documentation
 
@@ -46,9 +47,9 @@ EduFlow provides a marketing automation engine where each lead interaction can t
 - [GitFlow Strategy](docs/gitflow.md)
 - [Deployment Strategy](docs/deployment.md)
 - [Local Development](docs/local-development.md)
-- [Azure Container Apps Deployment](docs/azure-deployment.md)
-- [Azure Secrets](docs/azure-secrets.md)
-- [Azure Deployment Runbook](docs/azure-runbook.md)
+- [Render Deployment](docs/render-deployment.md)
+- [CloudAMQP](docs/cloudamqp.md)
+- [Deployment](docs/portfolio-deployment.md)
 
 ## Architecture Decision Records
 
@@ -139,26 +140,33 @@ Format files:
 npm run format
 ```
 
-## Azure Deployment
+## Deployment
 
-Phase 20 prepares a manual deployment to Azure Container Apps using the image published in GHCR.
-The API uses external ingress on port `3000`; the Outbox Publisher and Automation workers run
-without ingress; PostgreSQL and Redis use managed Azure services; RabbitMQ remains an external
-cloud-reachable dependency.
+Render is the active public-demo target. The architecture uses:
 
-Start with:
+- `eduflow-api` as a Render Web Service;
+- `eduflow-outbox-worker` as a Render Background Worker;
+- `eduflow-automation-worker` as a Render Background Worker;
+- Render PostgreSQL or another PostgreSQL-compatible provider;
+- CloudAMQP as the external RabbitMQ broker;
+- GHCR for published, versioned Docker images.
 
-```bash
-cp infra/azure/env.example infra/azure/env.local
-bash infra/azure/create-resources.sh
-bash infra/azure/deploy-container-apps.sh
-bash infra/azure/run-migrations.sh
+Start from the repository Blueprint:
+
+```txt
+render.yaml
 ```
 
-The current application image is not migration-capable. Configure a dedicated `MIGRATIONS_IMAGE`
-before creating or running the Azure Container Apps migration Job. See the
-[Azure Deployment Runbook](docs/azure-runbook.md) for prerequisites, secrets, probes, deployment
-order and rollback guidance.
+Enter `RABBITMQ_URL` and any optional `REDIS_URL` only in Render secret settings. Never commit real
+connection URLs.
+
+The public deployment is intentionally free or low-cost and limited. Render Background Workers do
+not have a free plan, so the complete asynchronous flow may be kept local when avoiding charges.
+Docker Compose remains the reference for running PostgreSQL, Redis, RabbitMQ, migrations, the API
+and both workers together.
+
+See [Render Deployment](docs/render-deployment.md), [CloudAMQP](docs/cloudamqp.md) and
+[Deployment](docs/portfolio-deployment.md).
 
 ## Code Quality
 
