@@ -9,6 +9,17 @@ import {
   Post,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiInternalServerErrorResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
   AutomationFlowNotFoundError,
   CampaignDoesNotBelongToOrganizationError,
 } from '../../application/automations/errors';
@@ -30,7 +41,13 @@ import {
 import { CreateAutomationFlowDto } from './dto/create-automation-flow.dto';
 import { EvaluateAutomationsDto } from './dto/evaluate-automations.dto';
 import { UpdateAutomationFlowStatusDto } from './dto/update-automation-flow-status.dto';
+import { ErrorResponseDto } from '../common/dto/error-response.dto';
 
+@ApiTags('Automations')
+@ApiInternalServerErrorResponse({
+  description: 'Unexpected internal server error',
+  type: ErrorResponseDto,
+})
 @Controller()
 export class AutomationsController {
   constructor(
@@ -44,6 +61,14 @@ export class AutomationsController {
   ) {}
 
   @Post('automations')
+  @ApiOperation({ summary: 'Create Automation' })
+  @ApiBody({ type: CreateAutomationFlowDto })
+  @ApiCreatedResponse({ description: 'Automation flow created', type: AutomationFlowResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid automation payload', type: ErrorResponseDto })
+  @ApiNotFoundResponse({
+    description: 'Organization or campaign not found',
+    type: ErrorResponseDto,
+  })
   async create(@Body() body: unknown): Promise<AutomationFlowResponseDto> {
     const dto = CreateAutomationFlowDto.fromBody(body);
     try {
@@ -54,6 +79,14 @@ export class AutomationsController {
   }
 
   @Post('automations/evaluate')
+  @ApiOperation({ summary: 'Evaluate automations for a lead event' })
+  @ApiBody({ type: EvaluateAutomationsDto })
+  @ApiCreatedResponse({
+    description: 'Automation evaluation completed',
+    type: EvaluateAutomationsResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid lead event ID', type: ErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'Lead event not found', type: ErrorResponseDto })
   async evaluate(@Body() body: unknown): Promise<EvaluateAutomationsResponseDto> {
     const dto = EvaluateAutomationsDto.fromBody(body);
     try {
@@ -66,6 +99,12 @@ export class AutomationsController {
   }
 
   @Get('automations')
+  @ApiOperation({ summary: 'List automations' })
+  @ApiOkResponse({
+    description: 'Automation flows returned',
+    type: AutomationFlowResponseDto,
+    isArray: true,
+  })
   async list(): Promise<AutomationFlowResponseDto[]> {
     return (await this.listUseCase.execute()).map((flow) =>
       AutomationFlowResponseDto.fromDomain(flow),
@@ -73,6 +112,10 @@ export class AutomationsController {
   }
 
   @Get('automations/:id')
+  @ApiOperation({ summary: 'Get automation by ID' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Automation flow ID' })
+  @ApiOkResponse({ description: 'Automation flow returned', type: AutomationFlowResponseDto })
+  @ApiNotFoundResponse({ description: 'Automation flow not found', type: ErrorResponseDto })
   async findById(@Param('id') id: string): Promise<AutomationFlowResponseDto> {
     try {
       return AutomationFlowResponseDto.fromDomain(await this.findByIdUseCase.execute(id));
@@ -82,6 +125,14 @@ export class AutomationsController {
   }
 
   @Get('organizations/:organizationId/automations')
+  @ApiOperation({ summary: 'List automations by organization' })
+  @ApiParam({ name: 'organizationId', format: 'uuid', description: 'Organization ID' })
+  @ApiOkResponse({
+    description: 'Automation flows returned',
+    type: AutomationFlowResponseDto,
+    isArray: true,
+  })
+  @ApiNotFoundResponse({ description: 'Organization not found', type: ErrorResponseDto })
   async listByOrganization(
     @Param('organizationId') organizationId: string,
   ): Promise<AutomationFlowResponseDto[]> {
@@ -95,6 +146,14 @@ export class AutomationsController {
   }
 
   @Get('campaigns/:campaignId/automations')
+  @ApiOperation({ summary: 'List automations by campaign' })
+  @ApiParam({ name: 'campaignId', format: 'uuid', description: 'Campaign ID' })
+  @ApiOkResponse({
+    description: 'Automation flows returned',
+    type: AutomationFlowResponseDto,
+    isArray: true,
+  })
+  @ApiNotFoundResponse({ description: 'Campaign not found', type: ErrorResponseDto })
   async listByCampaign(
     @Param('campaignId') campaignId: string,
   ): Promise<AutomationFlowResponseDto[]> {
@@ -108,6 +167,12 @@ export class AutomationsController {
   }
 
   @Patch('automations/:id/status')
+  @ApiOperation({ summary: 'Update Automation Status' })
+  @ApiBody({ type: UpdateAutomationFlowStatusDto })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Automation flow ID' })
+  @ApiOkResponse({ description: 'Automation status updated', type: AutomationFlowResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid automation status', type: ErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'Automation flow not found', type: ErrorResponseDto })
   async updateStatus(
     @Param('id') id: string,
     @Body() body: unknown,

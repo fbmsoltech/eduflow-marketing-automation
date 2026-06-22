@@ -2,99 +2,21 @@
 
 ## Overview
 
-EduFlow Marketing Automation is an event-driven marketing automation platform designed for academic campaigns, courses, community events and selection processes.
+EduFlow Marketing Automation is an event-driven backend for academic campaigns, courses,
+community events and selection processes.
 
-The system allows organizations to capture leads, track behavioral events, evaluate automation rules, update lead scores, create operational tasks and dispatch integrations asynchronously.
+Organizations can register campaigns and leads, capture behavioral events and define automation
+flows that update lead state, create tasks or dispatch webhooks. PostgreSQL is the source of truth,
+and background workers separate event publication and automation execution from the HTTP request
+path.
 
 ## Business Context
 
-Academic organizations, courses and communities often run campaigns to attract candidates, students or participants.
+Academic acquisition and selection processes often involve manual follow-up across forms, email,
+messaging groups and interviews. EduFlow models these interactions as LeadEvents so engagement can
+be processed consistently and audited.
 
-Most of the follow-up process is manual:
-
-- confirming registrations;
-- reminding candidates to complete forms;
-- identifying engaged leads;
-- creating follow-up tasks;
-- sending messages or integrations;
-- tracking conversion metrics.
-
-EduFlow simulates this scenario by providing an automation engine where every lead interaction can trigger rules and actions.
-
-## Main Capabilities
-
-- Organization management
-- Campaign management
-- Lead capture
-- Behavioral event tracking
-- Automation flow configuration
-- Rule evaluation
-- Lead scoring
-- Task creation
-- Webhook dispatch
-- Asynchronous processing
-- Retry and dead-letter handling
-- Observability with logs, metrics and traces
-
-## High-Level Architecture
-
-```txt
-                +----------------------+
-                |       REST API        |
-                |   NestJS + TypeScript |
-                +----------+-----------+
-                           |
-                           v
-                +----------------------+
-                |      PostgreSQL       |
-                |  Transactional data   |
-                +----------+-----------+
-                           |
-                           v
-                +----------------------+
-                |        Outbox         |
-                | Pending domain events |
-                +----------+-----------+
-                           |
-                           v
-                +----------------------+
-                |    Message Broker     |
-                | RabbitMQ / ServiceBus |
-                +----------+-----------+
-                           |
-        +------------------+------------------+
-        |                  |                  |
-        v                  v                  v
-+---------------+  +---------------+  +----------------+
-| Event Worker  |  |  Automation   |  | Webhook Worker |
-|               |  | Engine Worker |  |                |
-+---------------+  +---------------+  +----------------+
-        |                  |                  |
-        +------------------+------------------+
-                           |
-                           v
-                +----------------------+
-                |        Redis          |
-                |  Cache / Idempotency  |
-                +----------------------+
-```
-
-## Application Layers
-
-The project follows Clean Architecture principles.
-
-```txt
-Domain
-Application
-Infrastructure
-Presentation
-```
-
-### Domain Layer
-
-Contains enterprise rules and domain models.
-
-Examples:
+Core concepts include:
 
 - Organization
 - Campaign
@@ -104,212 +26,312 @@ Examples:
 - AutomationCondition
 - AutomationAction
 - AutomationExecution
+- Task
+- OutboxMessage
+- DeadLetterMessage
 
-### Application Layer
+## Architectural Style
 
-Contains use cases and application services.
+The project combines:
+
+- Clean Architecture boundaries;
+- use-case-driven application design;
+- repository contracts;
+- event-driven processing;
+- Transactional Outbox Pattern;
+- independently runnable API and workers.
+
+## Application Layers
+
+```txt
+Domain
+  Entities, domain types and business invariants
+
+Application
+  Use cases, repository contracts and orchestration services
+
+Infrastructure
+  Prisma repositories, RabbitMQ adapters, HTTP clients and observability
+
+Presentation
+  NestJS controllers, request DTOs and response DTOs
+```
+
+### Domain
+
+The Domain layer contains framework-independent entities and rules. It does not depend on NestJS,
+Prisma, HTTP, RabbitMQ or Redis.
 
 Examples:
 
-- CreateLeadUseCase
-- CreateCampaignUseCase
-- RegisterLeadEventUseCase
-- EvaluateAutomationFlowUseCase
-- DispatchAutomationActionUseCase
+- `Organization`
+- `Campaign`
+- `Lead`
+- `LeadEvent`
+- `AutomationFlow`
+- `AutomationCondition`
+- `AutomationAction`
+- `AutomationExecution`
+- `OutboxMessage`
+- `DeadLetterMessage`
 
-### Infrastructure Layer
+### Application
 
-Contains external dependencies.
-
-Examples:
-
-- Prisma repositories
-- RabbitMQ publishers and consumers
-- Redis idempotency store
-- Webhook HTTP client
-- Observability providers
-
-### Presentation Layer
-
-Contains controllers, request DTOs and API documentation.
+The Application layer coordinates business operations through focused use cases and services.
+Repository and broker dependencies are expressed as contracts.
 
 Examples:
 
-- LeadsController
-- CampaignsController
-- EventsController
-- AutomationsController
+- create and query organizations, campaigns and leads;
+- update lead score and status;
+- register idempotent LeadEvents;
+- create, activate and evaluate automation flows;
+- publish pending OutboxMessages;
+- inspect and ignore DeadLetterMessages.
+
+### Infrastructure
+
+The Infrastructure layer implements external adapters:
+
+- Prisma repository implementations;
+- PostgreSQL connection lifecycle;
+- RabbitMQ publisher;
+- native `fetch` webhook client;
+- Pino logging;
+- Prometheus metric collection;
+- database and broker health indicators.
+
+### Presentation
+
+The Presentation layer exposes REST controllers and validates requests at the HTTP boundary. The
+controllers delegate to application use cases and do not contain business rules.
+
+## Runtime Components
+
+```txt
+Client / API Consumer
+        |
+        v
+NestJS API
+        |
+        v
+PostgreSQL
+        |
+        v
+Outbox Messages
+        |
+        v
+Outbox Publisher Worker
+        |
+        v
+RabbitMQ / CloudAMQP
+        |
+        v
+Automation Worker
+        |
+        v
+Automation Engine
+        |
+        v
+Lead score/status updates, tasks, webhooks
+```
+
+### NestJS API
+
+The API exposes resources for:
+
+- organizations;
+- campaigns;
+- leads;
+- lead events;
+- automations;
+- outbox inspection and diagnostic publication;
+- dead letter inspection;
+- health and metrics.
+
+### PostgreSQL and Prisma
+
+PostgreSQL stores domain state, automation definitions, executions, OutboxMessages and
+DeadLetterMessages. Prisma implements persistence and committed migrations.
+
+### Outbox Publisher Worker
+
+The Outbox Publisher Worker:
+
+1. polls pending OutboxMessages;
+2. publishes a limited batch to RabbitMQ;
+3. records attempts;
+4. marks successful messages as `PUBLISHED`;
+5. marks failed publications as `FAILED`;
+6. logs each cycle without overlapping scheduled runs.
+
+### RabbitMQ
+
+The publisher uses:
+
+```txt
+Exchange: eduflow.events
+Type: topic
+Routing key: lead-events.<eventType>
+```
+
+The Automation Worker uses:
+
+```txt
+Queue: eduflow.automation.events
+Binding key: lead-events.#
+```
+
+RabbitMQ runs in Docker Compose locally. CloudAMQP provides external RabbitMQ for the Render demo.
+
+### Automation Worker
+
+The Automation Worker runs as a NestJS application context without an HTTP server. It consumes
+LeadEvent messages and invokes the Automation Engine using the referenced LeadEvent ID.
+
+Invalid messages and missing LeadEvents are rejected without requeue. Unexpected processing errors
+are rejected with requeue so transient failures can be retried by RabbitMQ.
+
+### Automation Engine
+
+The Automation Engine:
+
+1. loads the LeadEvent and its related lead, campaign and organization context;
+2. selects active flows by organization, campaign scope and trigger event type;
+3. evaluates conditions with AND semantics;
+4. creates an AutomationExecution for each matched flow;
+5. dispatches actions in configured order;
+6. records the final execution status.
+
+Current action types:
+
+- `INCREASE_LEAD_SCORE`
+- `DECREASE_LEAD_SCORE`
+- `UPDATE_LEAD_STATUS`
+- `CREATE_TASK`
+- `SEND_WEBHOOK`
+- `SEND_NOTIFICATION`, which currently fails explicitly because no notification provider is
+  implemented
 
 ## Event-Driven Flow
 
-Example: a lead is created from an academic selection campaign.
+Example: a candidate submits a campaign form.
 
 ```txt
-1. API receives POST /leads.
-2. Lead is persisted in PostgreSQL.
-3. A lead.created event is stored in the outbox table.
-4. Outbox publisher publishes the event to the message broker.
-5. Automation worker consumes the event.
-6. Active automation flows are evaluated.
-7. Matching actions are dispatched.
-8. Execution status is stored.
-9. Metrics and logs are emitted.
+1. POST /lead-events receives form.submitted.
+2. The API validates organization, campaign and lead relationships.
+3. LeadEvent and OutboxMessage are committed in one transaction.
+4. The Outbox Publisher Worker publishes the message.
+5. RabbitMQ routes it to eduflow.automation.events.
+6. The Automation Worker consumes the message.
+7. Active form.submitted flows are evaluated.
+8. Matching actions update lead state, create tasks or call webhooks.
+9. AutomationExecution stores success or failure.
+10. Logs and metrics expose the result.
 ```
 
-## Automation Engine Current Scope
+## Transactional Outbox Pattern
 
-The initial automation engine supports automation flow registration and manual evaluation through
-the REST API.
-
-Current behavior:
-
-- automation flows are created as `DRAFT` and can be activated explicitly;
-- active flows are selected by organization, campaign scope and lead event type;
-- conditions are evaluated with AND logic using event, lead, campaign and organization fields;
-- internal actions can update lead score, update lead status and create tasks;
-- each matched flow creates an execution that finishes as `SUCCEEDED` or `FAILED`;
-- webhook actions use native HTTP delivery with timeout and basic in-process retry;
-- final webhook failures create pending Dead Letter messages and fail the automation execution;
-- unsupported notification actions fail with a clear execution error.
-
-Evaluation can be triggered manually through `POST /automations/evaluate` or automatically by the
-Automation Worker. The worker consumes LeadEvent outbox messages from RabbitMQ and invokes the same
-Automation Engine use case. Redis usage, distributed or scheduled retries, automatic Dead Letter
-reprocessing and real notification dispatch remain planned for later phases.
-
-## Main Domain Events
-
-```txt
-lead.created
-form.started
-form.submitted
-email.opened
-email.clicked
-whatsapp.link_clicked
-document.downloaded
-interview.scheduled
-interview.confirmed
-candidate.approved
-candidate.rejected
-```
-
-## Reliability Patterns
-
-The project will implement:
-
-- Idempotency keys
-- Outbox Pattern
-- Retry with exponential backoff
-- Dead-letter queue
-- Correlation ID
-- Structured logging
-- Health checks
-- Metrics endpoint
-
-## Idempotency Strategy
-
-Every external event should contain an idempotency key.
-
-Example:
-
-```json
-{
-  "eventId": "b8f3c8fa-5a64-4a4e-91d4-2f7cbb2a0e3f",
-  "tenantId": "org_123",
-  "leadId": "lead_456",
-  "eventType": "lead.created",
-  "idempotencyKey": "org_123:lead.created:b8f3c8fa-5a64-4a4e-91d4-2f7cbb2a0e3f",
-  "occurredAt": "2026-05-12T10:00:00Z"
-}
-```
-
-Before processing an event, the application checks whether the idempotency key has already been processed.
-
-If the key already exists, the event is ignored safely.
-
-## Outbox Pattern
-
-When a business operation needs to persist data and publish an event, both actions are not executed independently.
-
-Instead, the application persists the business data and the outbox message in the same database transaction.
-
-Example:
+The API does not rely on publishing to RabbitMQ inside the same request path that persists the
+LeadEvent.
 
 ```txt
 BEGIN TRANSACTION
 
-INSERT INTO leads
 INSERT INTO lead_events
 INSERT INTO outbox_messages
 
 COMMIT
 ```
 
-Then a background worker publishes pending outbox messages to the message broker.
+The worker publishes only after the database transaction succeeds. This prevents a committed
+LeadEvent from being silently lost when RabbitMQ is unavailable during ingestion.
 
-Current implementation scope:
-
-- `POST /lead-events` stores the `lead_events` row and a `PENDING` `outbox_messages` row in the same PostgreSQL transaction.
-- Idempotent retries for the same `organizationId` and `idempotencyKey` return the existing lead event and do not create a duplicate outbox message.
-- Read-only inspection endpoints are available at `GET /outbox/messages` and `GET /outbox/messages/:id`.
-- `POST /outbox/messages/publish` manually publishes a limited batch of `PENDING` messages to the durable `eduflow.events` topic exchange.
-- Lead event messages use routing keys in the `lead-events.<eventType>` format.
-- Successful publications are marked as `PUBLISHED`; failed publications are marked as `FAILED`.
-- The Outbox Publisher Worker automatically schedules message publication.
-- The Automation Worker consumes `lead-events.#` messages from the durable
-  `eduflow.automation.events` queue.
-- Advanced retries and dead-letter handling remain planned for later phases.
-
-## Retry and Dead Letter Strategy
-
-The message processing flow should support retries for transient failures.
-
-Example retry policy:
+Outbox inspection endpoints:
 
 ```txt
-1st failure: retry after 5 seconds
-2nd failure: retry after 30 seconds
-3rd failure: retry after 2 minutes
-4th failure: retry after 10 minutes
-5th failure: send to dead-letter queue
+GET  /outbox/messages
+GET  /outbox/messages/:id
+POST /outbox/messages/publish
 ```
 
-Dead-lettered messages should be stored with enough information for analysis and reprocessing.
+The POST endpoint is a diagnostic/manual publishing option. The worker is the normal publication
+path.
 
-Current webhook delivery behavior:
+## Idempotency
 
-- `SEND_WEBHOOK` uses native `fetch` and an `AbortController` timeout;
-- HTTP 2xx responses are successful, while timeout, network errors and non-2xx responses fail;
-- delivery is attempted up to `WEBHOOK_MAX_ATTEMPTS` with a fixed
-  `WEBHOOK_RETRY_DELAY_MS` interval;
-- after the final failure, the automation execution is marked `FAILED` and a
-  `webhook.delivery_failed` record is stored in `dead_letter_messages`;
-- messages can be inspected and marked `IGNORED` through `/dead-letter/messages`;
-- automatic reprocessing and distributed retries are intentionally out of scope.
+LeadEvent ingestion requires an `idempotencyKey`. PostgreSQL enforces uniqueness for the pair:
 
-## Observability Strategy
+```txt
+organizationId + idempotencyKey
+```
 
-The application should expose logs, metrics and traces.
+When the same request is retried, the application returns the existing LeadEvent and does not
+create another OutboxMessage.
 
-### Logs
+This protects the ingestion boundary. Broader distributed action-level deduplication remains a
+future reliability improvement.
 
-API and worker logs are emitted as JSON through Pino. HTTP requests reuse the incoming
-`x-correlation-id` header or generate a UUID, return it in the response and include it in
-request-scoped logs. Worker events include processing identifiers, routing information, result
-counts, durations and errors where relevant.
+## Retry and Dead Letter Handling
 
-Structured fields include:
+### Broker processing
 
-- correlationId
-- causationId
-- tenantId
-- eventId
-- automationFlowId
-- executionId
+- publication failures are recorded on the OutboxMessage;
+- unexpected Automation Worker failures are rejected with requeue;
+- invalid or non-processable messages are rejected without requeue.
+
+Automatic exponential backoff and a dedicated broker dead-letter topology are not implemented in
+the current scope.
+
+### Webhook delivery
+
+`SEND_WEBHOOK` uses native `fetch` with:
+
+- configurable timeout;
+- configurable maximum attempts;
+- configurable fixed delay between attempts;
+- success on HTTP 2xx responses;
+- failure on timeout, network errors or non-2xx responses.
+
+After the final failed attempt:
+
+- the AutomationExecution is marked `FAILED`;
+- a `webhook.delivery_failed` DeadLetterMessage is persisted;
+- the message can be listed, inspected and marked `IGNORED`.
+
+Automatic Dead Letter reprocessing is not implemented.
+
+## Observability
+
+### Structured logs
+
+The API and workers emit JSON logs through Pino. HTTP requests reuse an incoming
+`x-correlation-id` or generate a UUID and return it in the response.
+
+Relevant fields include:
+
+- correlation ID;
+- event and aggregate identifiers;
+- automation flow and execution identifiers;
+- routing information;
+- processing counts and duration;
+- errors.
+
+### Health checks
+
+```txt
+GET /health/live
+GET /health/ready
+GET /health
+```
+
+- `/health/live` reports process liveness.
+- `/health/ready` verifies PostgreSQL and RabbitMQ.
+- `/health` returns the summary health response.
 
 ### Metrics
 
-The API exposes current PostgreSQL-backed gauges at `GET /metrics`:
+`GET /metrics` exposes Prometheus text metrics for:
 
 ```txt
 eduflow_outbox_pending_total
@@ -322,68 +344,45 @@ eduflow_automation_executions_failed_total
 eduflow_automation_flows_active_total
 ```
 
-`GET /health/live` reports process liveness. `GET /health/ready` checks PostgreSQL and RabbitMQ.
-Prometheus deployment, Grafana dashboards and complete OpenTelemetry tracing remain planned.
+Prometheus, Grafana and full distributed tracing are not deployed in the current portfolio demo.
 
-### Traces
+## Deployment Architecture
 
-Distributed traces should allow tracking a complete flow:
+The active public-demo target uses:
 
-```txt
-API request -> outbox message -> broker publish -> worker consume -> automation execution -> webhook delivery
-```
+- Render Web Service for the API;
+- Render PostgreSQL;
+- CloudAMQP for external RabbitMQ;
+- optional Render Background Workers;
+- GHCR for versioned images.
 
-## Main Technologies
+The public environment is intentionally limited. Render Free may introduce cold starts, and
+Background Workers can require paid capacity.
 
-- Node.js
-- TypeScript
-- NestJS
-- PostgreSQL
-- Prisma
-- Redis
-- RabbitMQ
-- Docker
-- Jest
-- Supertest
-- OpenTelemetry
-- Prometheus
-- Grafana
-- GitHub Actions
-- Azure Container Apps
+Docker Compose remains the complete local reference and runs PostgreSQL, Redis, RabbitMQ,
+migrations, the API and both workers.
 
-## Planned Azure Resources
-
-- Azure Container Registry
-- Azure Container Apps
-- Azure Database for PostgreSQL Flexible Server
-- Azure Cache for Redis
-- Azure Service Bus
-- Azure Key Vault
-- Azure Application Insights
-- Azure Monitor
-- Log Analytics Workspace
-
-## Initial Container Apps
-
-```txt
-eduflow-api
-eduflow-outbox-worker
-eduflow-automation-worker
-eduflow-webhook-worker
-```
+Azure was replaced as the active deployment strategy because this project is exclusively for
+portfolio use. Render and CloudAMQP reduce cost and operational complexity without changing the
+core event-driven design.
 
 ## Design Goals
 
-- Keep the domain independent from frameworks.
-- Keep business rules testable.
-- Make asynchronous processing reliable.
-- Avoid losing events between database persistence and broker publishing.
-- Provide clear observability for event processing.
-- Allow API and workers to scale independently.
-- Keep the repository understandable for portfolio evaluation.
+- Keep domain rules independent from frameworks.
+- Keep controllers thin and use cases focused.
+- Make persistence and broker publication auditable.
+- Avoid losing events between PostgreSQL and RabbitMQ.
+- Scale API and workers independently.
+- Preserve correlation across asynchronous processing.
+- Document incomplete reliability features honestly.
+- Keep the repository reproducible and understandable for technical review.
 
-## Current Status
+## Related Documentation
 
-Architecture documentation initialized.
-
-The actual implementation will be added incrementally through feature branches following the GitFlow strategy.
+- [API Examples](api-examples.md)
+- [Local Development](local-development.md)
+- [Deployment Strategy](deployment.md)
+- [Render Deployment](render-deployment.md)
+- [CloudAMQP](cloudamqp.md)
+- [ADR 0002: Event-Driven Architecture](decisions/0002-use-event-driven-architecture.md)
+- [ADR 0003: Outbox Pattern](decisions/0003-use-outbox-pattern.md)

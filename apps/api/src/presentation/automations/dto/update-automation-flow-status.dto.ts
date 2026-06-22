@@ -1,9 +1,15 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty } from '@nestjs/swagger';
 import { AutomationFlowStatus } from '../../../domain/automations/automation-types';
 import { isRecord } from './automation-dto-validation';
 
 export class UpdateAutomationFlowStatusDto {
-  private constructor(readonly status: AutomationFlowStatus) {}
+  @ApiProperty({ enum: AutomationFlowStatus, example: AutomationFlowStatus.ACTIVE })
+  readonly status: AutomationFlowStatus;
+
+  private constructor(status: AutomationFlowStatus) {
+    this.status = status;
+  }
 
   static fromBody(body: unknown): UpdateAutomationFlowStatusDto {
     if (!isRecord(body)) throw new BadRequestException('Request body must be an object');

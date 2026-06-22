@@ -1,7 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class PublishOutboxMessagesDto {
-  private constructor(readonly limit?: number) {}
+  @ApiPropertyOptional({ example: 10, minimum: 1, default: 100 })
+  readonly limit?: number;
+
+  private constructor(limit?: number) {
+    this.limit = limit;
+  }
 
   static fromBody(body: unknown): PublishOutboxMessagesDto {
     if (body === undefined || body === null) {

@@ -2,224 +2,238 @@
 
 ## Overview
 
-EduFlow Marketing Automation is designed to be deployed as a cloud-native application using containers.
+EduFlow uses Render and CloudAMQP as its active public-demo deployment strategy:
 
-The deployment strategy will support three environments:
+- Render Web Service for the NestJS API;
+- Render PostgreSQL for transactional persistence;
+- CloudAMQP as the external RabbitMQ broker;
+- optional Render Background Workers for Outbox publication and Automation processing;
+- GHCR for versioned Docker images.
 
-- Development
-- Staging
-- Production
+The remote environment is a limited technical portfolio demo, not a production stage. Docker
+Compose remains the authoritative way to run the complete system locally.
+
+## Why Render and CloudAMQP
+
+EduFlow exists exclusively as a portfolio project. The original Azure direction was replaced to
+reduce recurring cost and infrastructure complexity while retaining the architecture the project
+is intended to demonstrate.
+
+Render provides a small public HTTP surface and managed PostgreSQL. CloudAMQP preserves the
+RabbitMQ-based event pipeline without operating a broker inside Render.
+
+Azure is not an active deployment strategy and no Azure infrastructure is provisioned by this
+repository.
 
 ## Environment Strategy
 
-### Local
+### Complete local environment
 
-Used by developers to run the full stack locally.
+Docker Compose runs:
 
-Local dependencies:
+- PostgreSQL;
+- Redis;
+- RabbitMQ and its Management UI;
+- committed Prisma migrations;
+- NestJS API;
+- Outbox Publisher Worker;
+- Automation Worker.
 
-- PostgreSQL
-- Redis
-- RabbitMQ
-- Prometheus
-- Grafana
+```bash
+npm run docker:build
+npm run docker:up
+```
 
-The local environment will be managed with Docker Compose.
+This is the reference environment for demonstrating the complete event-driven flow without paid
+cloud worker capacity.
 
-### Development
+### API-only public demo
 
-Automatically deployed from the `develop` branch.
+The cost-controlled public mode can run:
 
-Purpose:
+- `eduflow-api` on Render;
+- `eduflow-postgres` on Render;
+- CloudAMQP connectivity for readiness and diagnostic publication.
 
-- Validate integrated features
-- Test API behavior
-- Validate workers
-- Run smoke tests
-- Inspect logs and metrics
+If the Background Workers are suspended or not created, the deployment must be described as an
+API and persistence demo. It must not be presented as a complete remote automation pipeline.
 
-### Staging
+### Complete remote demo
 
-Automatically deployed from `release/*` branches.
+The full remote flow adds:
 
-Purpose:
+- `eduflow-outbox-worker`;
+- `eduflow-automation-worker`.
 
-- Validate production candidate versions
-- Run database migrations
-- Run end-to-end tests
-- Validate release notes
-- Verify rollback strategy
+Render Background Workers do not use the Free Web Service plan and can incur charges. The selected
+plans must be reviewed before applying the Blueprint.
 
-### Production
+## Runtime Architecture
 
-Deployed from version tags created from the `main` branch.
+```txt
+Client
+  |
+  v
+Render Web Service: eduflow-api
+  |
+  +--> Render PostgreSQL
+  |
+  +--> CloudAMQP readiness check
 
-Examples:
+Render Worker: eduflow-outbox-worker
+  |
+  +--> PostgreSQL Outbox Messages
+  +--> CloudAMQP exchange
 
-- `v1.0.0`
-- `v1.0.1`
-- `v1.1.0`
+Render Worker: eduflow-automation-worker
+  |
+  +--> CloudAMQP queue
+  +--> PostgreSQL automation state
+```
 
-Production deployment should require manual approval.
+## Render Blueprint
 
-## Azure Target Architecture
+The repository-root `render.yaml` defines:
 
-The primary cloud target is Azure.
+| Resource                    | Render type       | Purpose                       |
+| --------------------------- | ----------------- | ----------------------------- |
+| `eduflow-api`               | Web Service       | Public NestJS API             |
+| `eduflow-outbox-worker`     | Background Worker | Publishes pending outbox rows |
+| `eduflow-automation-worker` | Background Worker | Consumes and evaluates events |
+| `eduflow-postgres`          | PostgreSQL        | Transactional database        |
 
-Planned Azure resources:
+The Blueprint builds the existing multi-stage `Dockerfile`. It does not store real database,
+RabbitMQ or Redis credentials.
 
-- Azure Container Registry
-- Azure Container Apps
-- Azure Database for PostgreSQL Flexible Server
-- Azure Cache for Redis
-- Azure Service Bus
-- Azure Key Vault
-- Azure Application Insights
-- Azure Monitor
-- Log Analytics Workspace
+## CloudAMQP
 
-## Container Apps
+CloudAMQP supplies the external `RABBITMQ_URL` used by the Render services. The expected topology
+is:
 
-The application will be split into multiple container apps:
+```txt
+Exchange: eduflow.events
+Type: topic
+Queue: eduflow.automation.events
+Binding: lead-events.#
+```
 
-- `eduflow-api`
-- `eduflow-outbox-worker`
-- `eduflow-automation-worker`
-- `eduflow-webhook-worker`
+The complete `amqps://` connection URL is a secret and belongs only in provider environment
+settings. See [CloudAMQP](cloudamqp.md).
+
+## Database Migrations
+
+Only committed Prisma migrations should be applied remotely:
+
+```bash
+npm run prisma:migrate:deploy
+```
+
+Never use `prisma migrate dev` against the Render database. The current Free deployment runbook
+applies migrations from a trusted local session because the runtime image intentionally excludes
+the Prisma CLI and migration sources.
+
+See [Render Deployment](render-deployment.md) for the exact procedure.
 
 ## Continuous Integration
 
 GitHub Actions validates pull requests and pushes targeting `develop` or `main`.
 
-The `CI` workflow:
+The CI workflow:
 
-1. Uses Node.js 22 with npm dependency caching.
-2. Starts PostgreSQL 16, Redis 7 and RabbitMQ 3 service containers.
-3. Installs dependencies with `npm ci`.
-4. Generates Prisma Client and applies existing migrations.
-5. Runs lint, formatting checks, unit tests, end-to-end tests and the TypeScript build.
+1. uses Node.js 22;
+2. starts PostgreSQL 16, Redis 7 and RabbitMQ 3 service containers;
+3. installs dependencies with `npm ci`;
+4. generates Prisma Client and applies committed migrations;
+5. runs lint, formatting checks, unit tests, end-to-end tests and the TypeScript build.
 
-The CI environment disables the Outbox Publisher and Automation Worker loops. The service
-containers are available to validation commands, but the workflow does not start long-running
-application or worker processes.
+The worker loops are disabled during CI so validation remains deterministic.
 
-The `Docker Build` workflow uses Docker Buildx to build the repository `Dockerfile` with the local
-tag `eduflow-marketing-automation:ci`. The image is loaded only into the workflow runner and is not
-published to a registry.
+## Container Images
 
-## Container Image Publication
+The `Docker Build` workflow validates that the repository image builds successfully without
+publishing it.
 
-The `Docker Publish` workflow publishes the production application image to GitHub Container
-Registry:
+The `Docker Publish` workflow publishes images to:
 
 ```txt
 ghcr.io/fbmsoltech/eduflow-marketing-automation
 ```
 
-Publication runs only for pushes to `main`, semantic version tags matching `v*.*.*` and manual
-`workflow_dispatch` executions. Pull requests continue to use the separate `Docker Build` workflow,
-which never pushes images.
+Publication runs for:
 
-The workflow authenticates to `ghcr.io` with the repository-scoped `GITHUB_TOKEN`. Its permissions
-are limited to reading repository contents and writing packages. No production secret is required
-for image publication.
+- pushes to `main`;
+- semantic version tags matching `v*.*.*`;
+- manual `workflow_dispatch` executions.
 
-Published tags include:
+Published metadata includes branch or tag information, semantic versions, a commit SHA tag and
+`latest` only on the default branch.
 
-- the source branch for branch events;
-- the Git tag for tag events;
-- the normalized semantic version for version tags;
-- a `sha-` tag for traceability;
-- `latest` only when the workflow runs from the repository default branch.
-
-Docker metadata also supplies OCI labels during publication. The Dockerfile defines the image
-title, description, source repository and MIT license so locally built images carry the same core
-provenance information.
-
-Published images are deployment artifacts for a future deployment phase. This phase does not
-deploy containers, configure Azure resources or publish to Docker Hub.
+Render currently builds the same Dockerfile directly from source. GHCR remains release evidence
+and an alternative manually selected image source.
 
 ## Deployment Flow
 
-### Development
+1. Validate the selected branch through GitHub Actions.
+2. Create or verify the CloudAMQP instance.
+3. Apply or sync `render.yaml`.
+4. Enter `RABBITMQ_URL` in Render secret settings.
+5. Let Render inject `DATABASE_URL`.
+6. Apply committed Prisma migrations from a trusted environment.
+7. Validate `/health/live`, `/health/ready`, `/health` and `/metrics`.
+8. Run the API smoke flow.
+9. If both workers are active, validate Outbox publication, broker consumption and automation
+   results.
+10. Record only observed evidence; do not publish an assumed URL.
 
-Trigger:
+## Secrets
 
-- Merge into `develop`
+Never commit:
 
-Steps:
+- `DATABASE_URL`;
+- CloudAMQP `RABBITMQ_URL`;
+- `REDIS_URL` containing remote credentials;
+- registry tokens;
+- copied provider environment exports;
+- logs or screenshots that expose credentials.
 
-1. Install dependencies
-2. Run lint
-3. Run type check
-4. Run unit tests
-5. Run integration tests
-6. Build Docker images
-7. Push images to container registry
-8. Deploy to Azure development environment
-9. Run smoke tests
+`.env.example` documents variable names and safe local defaults only.
 
-### Staging
+## Limitations
 
-Trigger:
+The public demo is intentionally free or low-cost and limited:
 
-- Push to `release/*`
+- a Render Free Web Service can sleep while idle and cold-start on the next request;
+- free database availability, retention and quotas are provider-controlled;
+- Render Background Workers can incur charges;
+- CloudAMQP shared plans have connection, channel, queue, throughput and storage limits;
+- the demo has no production availability, backup, disaster recovery or service-level objective;
+- only synthetic data should be used.
 
-Steps:
+Provider plan names and limits can change. Confirm current values in provider dashboards before
+creating resources.
 
-1. Run full validation pipeline
-2. Build versioned Docker images
-3. Push images to container registry
-4. Run database migrations
-5. Deploy to staging
-6. Run end-to-end tests
-7. Generate release candidate evidence
+## Rollback
 
-### Production
+The intended rollback strategy uses:
 
-Trigger:
+- immutable GHCR tags;
+- reviewed Prisma migrations;
+- versioned releases;
+- a previously validated container image;
+- documented manual provider steps.
 
-- Push tag from `main`
-
-Example:
-
-- `v1.0.0`
-
-Steps:
-
-1. Validate tag
-2. Build or promote versioned Docker images
-3. Apply database migrations
-4. Deploy API and workers
-5. Run smoke tests
-6. Monitor logs and metrics
-
-## Rollback Strategy
-
-The rollback strategy will be based on:
-
-- Immutable Docker image tags
-- Database migration review
-- Versioned releases
-- Previous stable container image
-- Documented manual rollback steps
-
-## Secrets Strategy
-
-Secrets must not be committed to the repository.
-
-Secrets will be managed using:
-
-- `.env.example` for local documentation
-- GitHub Actions secrets for CI/CD
-- Azure Key Vault for cloud environments
+Database rollback is not implied by redeploying an older application image and must be evaluated
+separately.
 
 ## Deployment Status
 
-Current status:
+Phase 22 added the first Render deployment runbook. The repository does not currently contain a
+validated public URL or completed evidence record, so the documentation must be treated as an
+execution guide rather than proof that the demo is online.
 
-- Continuous integration is implemented for pull requests and pushes to `develop` and `main`.
-- Docker image builds are validated without publishing images.
-- Production application images are published to GitHub Container Registry from `main`, version
-  tags and manual workflow executions.
-- Remote deployment is not implemented yet.
+See:
+
+- [Render Deployment](render-deployment.md)
+- [CloudAMQP](cloudamqp.md)
+- [Portfolio Deployment](portfolio-deployment.md)
+- [API Examples](api-examples.md)

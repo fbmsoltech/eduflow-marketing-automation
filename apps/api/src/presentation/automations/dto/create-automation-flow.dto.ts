@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AutomationActionType,
   AutomationConditionOperator,
@@ -7,29 +8,124 @@ import {
 } from '../../../domain/automations/automation-types';
 import { isJsonValue, isRecord, parseJsonObject, UUID_PATTERN } from './automation-dto-validation';
 
-export interface AutomationConditionRequestDto {
-  fieldPath: string;
-  operator: AutomationConditionOperator;
-  expectedValue?: AutomationJsonValue;
-  sortOrder?: number;
+export class AutomationConditionRequestDto {
+  @ApiProperty({ example: 'event.payload.link' })
+  readonly fieldPath!: string;
+
+  @ApiProperty({
+    enum: AutomationConditionOperator,
+    example: AutomationConditionOperator.CONTAINS,
+  })
+  readonly operator!: AutomationConditionOperator;
+
+  @ApiPropertyOptional({ example: 'edital' })
+  readonly expectedValue?: AutomationJsonValue;
+
+  @ApiPropertyOptional({ example: 1 })
+  readonly sortOrder?: number;
 }
 
-export interface AutomationActionRequestDto {
-  type: AutomationActionType;
-  config: AutomationJsonObject;
-  sortOrder?: number;
+export class AutomationActionRequestDto {
+  @ApiProperty({
+    enum: AutomationActionType,
+    example: AutomationActionType.INCREASE_LEAD_SCORE,
+  })
+  readonly type!: AutomationActionType;
+
+  @ApiProperty({
+    example: {
+      amount: 10,
+    },
+    type: 'object',
+    additionalProperties: true,
+  })
+  readonly config!: AutomationJsonObject;
+
+  @ApiPropertyOptional({ example: 1 })
+  readonly sortOrder?: number;
 }
 
 export class CreateAutomationFlowDto {
+  @ApiProperty({ example: 'ORGANIZATION_ID', format: 'uuid' })
+  readonly organizationId: string;
+
+  @ApiPropertyOptional({ example: 'CAMPAIGN_ID', format: 'uuid' })
+  readonly campaignId: string | undefined;
+
+  @ApiProperty({ example: 'Qualify engaged candidate' })
+  readonly name: string;
+
+  @ApiProperty({ example: 'email.clicked' })
+  readonly triggerEventType: string;
+
+  @ApiPropertyOptional({
+    example: {
+      owner: 'admissions-team',
+    },
+    type: 'object',
+    additionalProperties: true,
+  })
+  readonly metadata: AutomationJsonObject | undefined;
+
+  @ApiProperty({
+    type: () => AutomationConditionRequestDto,
+    isArray: true,
+    example: [
+      {
+        fieldPath: 'event.payload.link',
+        operator: 'CONTAINS',
+        expectedValue: 'edital',
+        sortOrder: 1,
+      },
+      {
+        fieldPath: 'lead.score',
+        operator: 'GREATER_THAN_OR_EQUALS',
+        expectedValue: 30,
+        sortOrder: 2,
+      },
+    ],
+  })
+  readonly conditions: AutomationConditionRequestDto[];
+
+  @ApiProperty({
+    type: () => AutomationActionRequestDto,
+    isArray: true,
+    example: [
+      {
+        type: 'INCREASE_LEAD_SCORE',
+        config: {
+          amount: 10,
+        },
+        sortOrder: 1,
+      },
+      {
+        type: 'UPDATE_LEAD_STATUS',
+        config: {
+          status: 'QUALIFIED',
+        },
+        sortOrder: 2,
+      },
+    ],
+  })
+  readonly actions: AutomationActionRequestDto[];
+
   private constructor(
-    readonly organizationId: string,
-    readonly campaignId: string | undefined,
-    readonly name: string,
-    readonly triggerEventType: string,
-    readonly metadata: AutomationJsonObject | undefined,
-    readonly conditions: AutomationConditionRequestDto[],
-    readonly actions: AutomationActionRequestDto[],
-  ) {}
+    organizationId: string,
+    campaignId: string | undefined,
+    name: string,
+    triggerEventType: string,
+    metadata: AutomationJsonObject | undefined,
+    conditions: AutomationConditionRequestDto[],
+    actions: AutomationActionRequestDto[],
+  ) {
+    this.organizationId = organizationId;
+    this.campaignId = campaignId;
+    this.name = name;
+    this.triggerEventType = triggerEventType;
+    this.metadata = metadata;
+    this.conditions = conditions;
+    this.actions = actions;
+  }
 
   static fromBody(body: unknown): CreateAutomationFlowDto {
     if (!isRecord(body)) throw new BadRequestException('Request body must be an object');
