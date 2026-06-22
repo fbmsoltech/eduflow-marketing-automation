@@ -2,13 +2,9 @@
 
 ## Overview
 
-EduFlow Marketing Automation is designed to be deployed as a cloud-native application using containers.
-
-The deployment strategy will support three environments:
-
-- Development
-- Staging
-- Production
+EduFlow Marketing Automation uses containers locally and supports a limited public portfolio demo.
+Render is the active remote target, CloudAMQP provides external RabbitMQ, and GHCR stores published
+application images.
 
 ## Environment Strategy
 
@@ -26,66 +22,22 @@ Local dependencies:
 
 The local environment will be managed with Docker Compose.
 
-### Development
+### Public Portfolio Demo
 
-Automatically deployed from the `develop` branch.
+The remote environment is a reviewer-facing demonstration, not a production stage. It can be
+deployed manually from a selected repository branch through the Render Blueprint.
 
-Purpose:
+The target resources are:
 
-- Validate integrated features
-- Test API behavior
-- Validate workers
-- Run smoke tests
-- Inspect logs and metrics
+- Render Web Service `eduflow-api`;
+- Render Background Worker `eduflow-outbox-worker`;
+- Render Background Worker `eduflow-automation-worker`;
+- Render PostgreSQL or an external PostgreSQL-compatible database;
+- CloudAMQP as external RabbitMQ.
 
-### Staging
-
-Automatically deployed from `release/*` branches.
-
-Purpose:
-
-- Validate production candidate versions
-- Run database migrations
-- Run end-to-end tests
-- Validate release notes
-- Verify rollback strategy
-
-### Production
-
-Deployed from version tags created from the `main` branch.
-
-Examples:
-
-- `v1.0.0`
-- `v1.0.1`
-- `v1.1.0`
-
-Production deployment should require manual approval.
-
-## Azure Target Architecture
-
-The primary cloud target is Azure.
-
-Planned Azure resources:
-
-- Azure Container Registry
-- Azure Container Apps
-- Azure Database for PostgreSQL Flexible Server
-- Azure Cache for Redis
-- Azure Service Bus
-- Azure Key Vault
-- Azure Application Insights
-- Azure Monitor
-- Log Analytics Workspace
-
-## Container Apps
-
-The application will be split into multiple container apps:
-
-- `eduflow-api`
-- `eduflow-outbox-worker`
-- `eduflow-automation-worker`
-- `eduflow-webhook-worker`
+The API and database can use free plans with provider limitations. Background workers require paid
+Render instances, so a no-cost demo may omit or suspend them and use Docker Compose to demonstrate
+the complete asynchronous flow.
 
 ## Continuous Integration
 
@@ -136,63 +88,22 @@ Docker metadata also supplies OCI labels during publication. The Dockerfile defi
 title, description, source repository and MIT license so locally built images carry the same core
 provenance information.
 
-Published images are deployment artifacts for a future deployment phase. This phase does not
-deploy containers, configure Azure resources or publish to Docker Hub.
+Published images remain immutable deployment artifacts and portfolio evidence. The repository
+Blueprint builds the same Dockerfile directly from source. GHCR can also be selected manually as a
+prebuilt-image source in Render.
 
 ## Deployment Flow
 
-### Development
+### Render Demo
 
-Trigger:
-
-- Merge into `develop`
-
-Steps:
-
-1. Install dependencies
-2. Run lint
-3. Run type check
-4. Run unit tests
-5. Run integration tests
-6. Build Docker images
-7. Push images to container registry
-8. Deploy to Azure development environment
-9. Run smoke tests
-
-### Staging
-
-Trigger:
-
-- Push to `release/*`
-
-Steps:
-
-1. Run full validation pipeline
-2. Build versioned Docker images
-3. Push images to container registry
-4. Run database migrations
-5. Deploy to staging
-6. Run end-to-end tests
-7. Generate release candidate evidence
-
-### Production
-
-Trigger:
-
-- Push tag from `main`
-
-Example:
-
-- `v1.0.0`
-
-Steps:
-
-1. Validate tag
-2. Build or promote versioned Docker images
-3. Apply database migrations
-4. Deploy API and workers
-5. Run smoke tests
-6. Monitor logs and metrics
+1. Validate the branch in GitHub Actions.
+2. Apply or sync `render.yaml` in Render.
+3. Enter `RABBITMQ_URL` as a secret.
+4. Let Render inject `DATABASE_URL` from the Blueprint database.
+5. Apply committed Prisma migrations from a trusted environment.
+6. Deploy the API and, when paid worker capacity is desired, both workers.
+7. Validate `/health/live`, `/health/ready`, `/health` and `/metrics`.
+8. Run the minimum API and asynchronous smoke flow.
 
 ## Rollback Strategy
 
@@ -208,11 +119,14 @@ The rollback strategy will be based on:
 
 Secrets must not be committed to the repository.
 
-Secrets will be managed using:
+Secrets are managed using:
 
-- `.env.example` for local documentation
-- GitHub Actions secrets for CI/CD
-- Azure Key Vault for cloud environments
+- `.env.example` for local variable names and non-secret examples;
+- GitHub Actions secrets when a workflow needs credentials;
+- Render secret environment variables for deployment URLs;
+- CloudAMQP's console for RabbitMQ credentials.
+
+Real `DATABASE_URL`, `RABBITMQ_URL`, `REDIS_URL` and registry tokens must never be committed.
 
 ## Deployment Status
 
@@ -222,4 +136,10 @@ Current status:
 - Docker image builds are validated without publishing images.
 - Production application images are published to GitHub Container Registry from `main`, version
   tags and manual workflow executions.
-- Remote deployment is not implemented yet.
+- `render.yaml` defines the API, both workers and PostgreSQL.
+- Render and CloudAMQP are the active Deployment direction.
+- The public environment is explicitly limited and not production.
+- Docker Compose remains the complete local reference environment.
+
+See [Render Deployment](render-deployment.md), [CloudAMQP](cloudamqp.md) and
+[Deployment](portfolio-deployment.md).

@@ -59,7 +59,7 @@ EduFlow simulates this scenario by providing an automation engine where every le
                            v
                 +----------------------+
                 |    Message Broker     |
-                | RabbitMQ / ServiceBus |
+                |       RabbitMQ        |
                 +----------+-----------+
                            |
         +------------------+------------------+
@@ -349,27 +349,27 @@ API request -> outbox message -> broker publish -> worker consume -> automation 
 - Prometheus
 - Grafana
 - GitHub Actions
-- Azure Container Apps
+- Render
+- CloudAMQP
 
-## Planned Azure Resources
+## Deployment
 
-- Azure Container Registry
-- Azure Container Apps
-- Azure Database for PostgreSQL Flexible Server
-- Azure Cache for Redis
-- Azure Service Bus
-- Azure Key Vault
-- Azure Application Insights
-- Azure Monitor
-- Log Analytics Workspace
+The active public-demo target uses Render for the API, workers and PostgreSQL, with CloudAMQP as an
+external RabbitMQ provider. GHCR remains the registry for published Docker images.
 
-## Initial Container Apps
+The public environment is intentionally limited and is not production. Docker Compose remains the
+reference for the complete local stack, including PostgreSQL, Redis, RabbitMQ, migrations, the API
+and both workers.
+
+Azure is no longer an active deployment target. It may be revisited only as a future infrastructure
+exercise.
+
+## Render Services
 
 ```txt
 eduflow-api
 eduflow-outbox-worker
 eduflow-automation-worker
-eduflow-webhook-worker
 ```
 
 ## Design Goals
