@@ -36,7 +36,7 @@ services:
   - type: worker
     name: eduflow-outbox-worker
     runtime: docker
-    plan: starter
+    plan: free
     region: oregon
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -70,7 +70,7 @@ services:
   - type: worker
     name: eduflow-automation-worker
     runtime: docker
-    plan: starter
+    plan: free
     region: oregon
     dockerfilePath: ./Dockerfile
     dockerContext: .
