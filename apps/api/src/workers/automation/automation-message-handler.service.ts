@@ -40,9 +40,14 @@ export class AutomationMessageHandlerService {
     const message = this.parseMessage(content);
 
     if (message.aggregateType !== 'LeadEvent') {
-      this.logger.log(
-        `Automation message ignored: messageId=${message.messageId} aggregateType=${message.aggregateType}`,
-      );
+      this.logger.log({
+        event: 'automation.message.ignored',
+        messageId: message.messageId,
+        correlationId: message.correlationId,
+        aggregateType: message.aggregateType,
+        aggregateId: message.aggregateId,
+        eventType: message.eventType,
+      });
 
       return {
         status: 'IGNORED',
@@ -55,9 +60,17 @@ export class AutomationMessageHandlerService {
       message.aggregateId,
     );
 
-    this.logger.log(
-      `Automation engine executed: leadEventId=${message.aggregateId} eventType=${message.eventType} matched=${execution.matchedFlows} executed=${execution.executedFlows} skipped=${execution.skippedFlows} failed=${execution.failedFlows}`,
-    );
+    this.logger.log({
+      event: 'automation.engine.executed',
+      messageId: message.messageId,
+      correlationId: message.correlationId,
+      leadEventId: message.aggregateId,
+      eventType: message.eventType,
+      matchedFlows: execution.matchedFlows,
+      executedFlows: execution.executedFlows,
+      skippedFlows: execution.skippedFlows,
+      failedFlows: execution.failedFlows,
+    });
 
     return {
       status: 'PROCESSED',

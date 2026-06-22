@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { MetricsModule } from './infrastructure/observability/metrics.module';
+import { ObservabilityModule } from './infrastructure/observability/observability.module';
 import { AutomationsModule } from './presentation/automations/automations.module';
 import { CampaignsModule } from './presentation/campaigns/campaigns.module';
 import { DeadLetterModule } from './presentation/dead-letter/dead-letter.module';
@@ -10,6 +12,8 @@ import { OutboxModule } from './presentation/outbox/outbox.module';
 
 @Module({
   imports: [
+    ObservabilityModule,
+    MetricsModule,
     HealthModule,
     AutomationsModule,
     OrganizationsModule,

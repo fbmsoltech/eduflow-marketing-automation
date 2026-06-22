@@ -39,6 +39,9 @@ WEBHOOK_MAX_ATTEMPTS=3
 WEBHOOK_RETRY_DELAY_MS=1000
 ```
 
+`LOG_LEVEL` controls the minimum JSON log level used by the API and workers. Supported Pino levels
+include `trace`, `debug`, `info`, `warn`, `error` and `fatal`.
+
 Prisma commands read `DATABASE_URL` from the local environment. For the default local setup, copy `.env.example` to `.env` before running migrations.
 
 RabbitMQ Management UI credentials:
@@ -166,6 +169,40 @@ To run the compiled worker after `npm run build`:
 ```bash
 npm run start:worker:automation:prod
 ```
+
+## Observability
+
+API and worker logs are emitted as JSON through Pino. HTTP requests read `x-correlation-id` when it
+is provided, otherwise generate a UUID. The same value is returned in the response
+`x-correlation-id` header and included in request-scoped logs as `correlationId`.
+
+Check process liveness:
+
+```bash
+curl http://localhost:3000/health/live
+```
+
+Check application readiness, including PostgreSQL and RabbitMQ:
+
+```bash
+curl http://localhost:3000/health/ready
+```
+
+The original summary endpoint remains available:
+
+```bash
+curl http://localhost:3000/health
+```
+
+Inspect current metrics in Prometheus text format:
+
+```bash
+curl http://localhost:3000/metrics
+```
+
+The initial metrics expose current counts for outbox statuses, Dead Letter statuses, automation
+execution results and active automation flows. Prometheus, Grafana, OpenTelemetry and external
+observability backends are not deployed in this phase.
 
 ## Database Migrations
 

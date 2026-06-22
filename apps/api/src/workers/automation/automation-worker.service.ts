@@ -29,7 +29,9 @@ export class AutomationWorkerService implements OnApplicationBootstrap, BeforeAp
 
   async onApplicationBootstrap(): Promise<void> {
     if (!this.isEnabled()) {
-      this.logger.log('Automation worker is disabled');
+      this.logger.log({
+        event: 'automation.worker.disabled',
+      });
 
       return;
     }
@@ -51,9 +53,13 @@ export class AutomationWorkerService implements OnApplicationBootstrap, BeforeAp
     });
 
     this.consumerTag = consumer.consumerTag;
-    this.logger.log(
-      `Automation worker started: exchange=${this.exchange} queue=${queue} bindingKey=${bindingKey} prefetch=${prefetch}`,
-    );
+    this.logger.log({
+      event: 'automation.worker.started',
+      exchange: this.exchange,
+      queue,
+      bindingKey,
+      prefetch,
+    });
   }
 
   async beforeApplicationShutdown(): Promise<void> {
@@ -66,34 +72,61 @@ export class AutomationWorkerService implements OnApplicationBootstrap, BeforeAp
     this.consumerTag = undefined;
     this.channel = undefined;
     this.connection = undefined;
-    this.logger.log('Automation worker stopped');
+    this.logger.log({
+      event: 'automation.worker.stopped',
+    });
   }
 
   async processMessage(message: ConsumeMessage | null): Promise<void> {
     if (!message) {
-      this.logger.warn('Automation worker consumer was cancelled by RabbitMQ');
+      this.logger.warn({
+        event: 'automation.consumer.cancelled',
+      });
 
       return;
     }
 
     if (!this.channel) {
-      this.logger.error('Automation worker received a message without an active channel');
+      this.logger.error({
+        event: 'automation.message.channel_missing',
+      });
 
       return;
     }
 
+    const messageContext = {
+      messageId: this.optionalString(message.properties.messageId),
+      correlationId: this.optionalString(message.properties.correlationId),
+      routingKey: message.fields.routingKey,
+      redelivered: message.fields.redelivered,
+    };
+    const startedAt = Date.now();
+    this.logger.log({
+      event: 'automation.message.started',
+      ...messageContext,
+    });
+
     try {
       await this.messageHandler.handle(message.content);
       this.channel.ack(message);
+      this.logger.log({
+        event: 'automation.message.finished',
+        ...messageContext,
+        durationMs: Date.now() - startedAt,
+      });
     } catch (error) {
       const requeue = !(
         error instanceof InvalidAutomationMessageError || error instanceof LeadEventNotFoundError
       );
 
       this.channel.nack(message, false, requeue);
-      this.logger.error(
-        `Automation message failed: requeue=${requeue} error=${this.getErrorMessage(error)}`,
-      );
+      this.logger.error({
+        event: 'automation.message.failed',
+        ...messageContext,
+        durationMs: Date.now() - startedAt,
+        requeue,
+        error: this.getErrorMessage(error),
+      });
     }
   }
 
@@ -134,5 +167,9 @@ export class AutomationWorkerService implements OnApplicationBootstrap, BeforeAp
 
   private getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private optionalString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim() ? value : undefined;
   }
 }

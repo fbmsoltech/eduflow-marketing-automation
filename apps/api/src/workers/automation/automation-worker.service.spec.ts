@@ -86,7 +86,9 @@ describe('AutomationWorkerService', () => {
     await service.onApplicationBootstrap();
 
     expect(mockedConnect).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith('Automation worker is disabled');
+    expect(log).toHaveBeenCalledWith({
+      event: 'automation.worker.disabled',
+    });
   });
 
   it('declares topology and consumes with configured prefetch', async () => {
@@ -123,6 +125,12 @@ describe('AutomationWorkerService', () => {
 
     expect(ack).toHaveBeenCalledWith(message);
     expect(nack).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'automation.message.finished',
+        routingKey: 'lead-events.email.clicked',
+      }),
+    );
   });
 
   it.each([
