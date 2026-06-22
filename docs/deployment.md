@@ -2,144 +2,238 @@
 
 ## Overview
 
-EduFlow Marketing Automation uses containers locally and supports a limited public portfolio demo.
-Render is the active remote target, CloudAMQP provides external RabbitMQ, and GHCR stores published
-application images.
+EduFlow uses Render and CloudAMQP as its active public-demo deployment strategy:
+
+- Render Web Service for the NestJS API;
+- Render PostgreSQL for transactional persistence;
+- CloudAMQP as the external RabbitMQ broker;
+- optional Render Background Workers for Outbox publication and Automation processing;
+- GHCR for versioned Docker images.
+
+The remote environment is a limited technical portfolio demo, not a production stage. Docker
+Compose remains the authoritative way to run the complete system locally.
+
+## Why Render and CloudAMQP
+
+EduFlow exists exclusively as a portfolio project. The original Azure direction was replaced to
+reduce recurring cost and infrastructure complexity while retaining the architecture the project
+is intended to demonstrate.
+
+Render provides a small public HTTP surface and managed PostgreSQL. CloudAMQP preserves the
+RabbitMQ-based event pipeline without operating a broker inside Render.
+
+Azure is not an active deployment strategy and no Azure infrastructure is provisioned by this
+repository.
 
 ## Environment Strategy
 
-### Local
+### Complete local environment
 
-Used by developers to run the full stack locally.
+Docker Compose runs:
 
-Local dependencies:
+- PostgreSQL;
+- Redis;
+- RabbitMQ and its Management UI;
+- committed Prisma migrations;
+- NestJS API;
+- Outbox Publisher Worker;
+- Automation Worker.
 
-- PostgreSQL
-- Redis
-- RabbitMQ
-- Prometheus
-- Grafana
+```bash
+npm run docker:build
+npm run docker:up
+```
 
-The local environment will be managed with Docker Compose.
+This is the reference environment for demonstrating the complete event-driven flow without paid
+cloud worker capacity.
 
-### Public Portfolio Demo
+### API-only public demo
 
-The remote environment is a reviewer-facing demonstration, not a production stage. It can be
-deployed manually from a selected repository branch through the Render Blueprint.
+The cost-controlled public mode can run:
 
-The target resources are:
+- `eduflow-api` on Render;
+- `eduflow-postgres` on Render;
+- CloudAMQP connectivity for readiness and diagnostic publication.
 
-- Render Web Service `eduflow-api`;
-- Render Background Worker `eduflow-outbox-worker`;
-- Render Background Worker `eduflow-automation-worker`;
-- Render PostgreSQL or an external PostgreSQL-compatible database;
-- CloudAMQP as external RabbitMQ.
+If the Background Workers are suspended or not created, the deployment must be described as an
+API and persistence demo. It must not be presented as a complete remote automation pipeline.
 
-The API and database can use free plans with provider limitations. Background workers require paid
-Render instances, so a no-cost demo may omit or suspend them and use Docker Compose to demonstrate
-the complete asynchronous flow.
+### Complete remote demo
+
+The full remote flow adds:
+
+- `eduflow-outbox-worker`;
+- `eduflow-automation-worker`.
+
+Render Background Workers do not use the Free Web Service plan and can incur charges. The selected
+plans must be reviewed before applying the Blueprint.
+
+## Runtime Architecture
+
+```txt
+Client
+  |
+  v
+Render Web Service: eduflow-api
+  |
+  +--> Render PostgreSQL
+  |
+  +--> CloudAMQP readiness check
+
+Render Worker: eduflow-outbox-worker
+  |
+  +--> PostgreSQL Outbox Messages
+  +--> CloudAMQP exchange
+
+Render Worker: eduflow-automation-worker
+  |
+  +--> CloudAMQP queue
+  +--> PostgreSQL automation state
+```
+
+## Render Blueprint
+
+The repository-root `render.yaml` defines:
+
+| Resource                    | Render type       | Purpose                       |
+| --------------------------- | ----------------- | ----------------------------- |
+| `eduflow-api`               | Web Service       | Public NestJS API             |
+| `eduflow-outbox-worker`     | Background Worker | Publishes pending outbox rows |
+| `eduflow-automation-worker` | Background Worker | Consumes and evaluates events |
+| `eduflow-postgres`          | PostgreSQL        | Transactional database        |
+
+The Blueprint builds the existing multi-stage `Dockerfile`. It does not store real database,
+RabbitMQ or Redis credentials.
+
+## CloudAMQP
+
+CloudAMQP supplies the external `RABBITMQ_URL` used by the Render services. The expected topology
+is:
+
+```txt
+Exchange: eduflow.events
+Type: topic
+Queue: eduflow.automation.events
+Binding: lead-events.#
+```
+
+The complete `amqps://` connection URL is a secret and belongs only in provider environment
+settings. See [CloudAMQP](cloudamqp.md).
+
+## Database Migrations
+
+Only committed Prisma migrations should be applied remotely:
+
+```bash
+npm run prisma:migrate:deploy
+```
+
+Never use `prisma migrate dev` against the Render database. The current Free deployment runbook
+applies migrations from a trusted local session because the runtime image intentionally excludes
+the Prisma CLI and migration sources.
+
+See [Render Deployment](render-deployment.md) for the exact procedure.
 
 ## Continuous Integration
 
 GitHub Actions validates pull requests and pushes targeting `develop` or `main`.
 
-The `CI` workflow:
+The CI workflow:
 
-1. Uses Node.js 22 with npm dependency caching.
-2. Starts PostgreSQL 16, Redis 7 and RabbitMQ 3 service containers.
-3. Installs dependencies with `npm ci`.
-4. Generates Prisma Client and applies existing migrations.
-5. Runs lint, formatting checks, unit tests, end-to-end tests and the TypeScript build.
+1. uses Node.js 22;
+2. starts PostgreSQL 16, Redis 7 and RabbitMQ 3 service containers;
+3. installs dependencies with `npm ci`;
+4. generates Prisma Client and applies committed migrations;
+5. runs lint, formatting checks, unit tests, end-to-end tests and the TypeScript build.
 
-The CI environment disables the Outbox Publisher and Automation Worker loops. The service
-containers are available to validation commands, but the workflow does not start long-running
-application or worker processes.
+The worker loops are disabled during CI so validation remains deterministic.
 
-The `Docker Build` workflow uses Docker Buildx to build the repository `Dockerfile` with the local
-tag `eduflow-marketing-automation:ci`. The image is loaded only into the workflow runner and is not
-published to a registry.
+## Container Images
 
-## Container Image Publication
+The `Docker Build` workflow validates that the repository image builds successfully without
+publishing it.
 
-The `Docker Publish` workflow publishes the production application image to GitHub Container
-Registry:
+The `Docker Publish` workflow publishes images to:
 
 ```txt
 ghcr.io/fbmsoltech/eduflow-marketing-automation
 ```
 
-Publication runs only for pushes to `main`, semantic version tags matching `v*.*.*` and manual
-`workflow_dispatch` executions. Pull requests continue to use the separate `Docker Build` workflow,
-which never pushes images.
+Publication runs for:
 
-The workflow authenticates to `ghcr.io` with the repository-scoped `GITHUB_TOKEN`. Its permissions
-are limited to reading repository contents and writing packages. No production secret is required
-for image publication.
+- pushes to `main`;
+- semantic version tags matching `v*.*.*`;
+- manual `workflow_dispatch` executions.
 
-Published tags include:
+Published metadata includes branch or tag information, semantic versions, a commit SHA tag and
+`latest` only on the default branch.
 
-- the source branch for branch events;
-- the Git tag for tag events;
-- the normalized semantic version for version tags;
-- a `sha-` tag for traceability;
-- `latest` only when the workflow runs from the repository default branch.
-
-Docker metadata also supplies OCI labels during publication. The Dockerfile defines the image
-title, description, source repository and MIT license so locally built images carry the same core
-provenance information.
-
-Published images remain immutable deployment artifacts and portfolio evidence. The repository
-Blueprint builds the same Dockerfile directly from source. GHCR can also be selected manually as a
-prebuilt-image source in Render.
+Render currently builds the same Dockerfile directly from source. GHCR remains release evidence
+and an alternative manually selected image source.
 
 ## Deployment Flow
 
-### Render Demo
-
-1. Validate the branch in GitHub Actions.
-2. Apply or sync `render.yaml` in Render.
-3. Enter `RABBITMQ_URL` as a secret.
-4. Let Render inject `DATABASE_URL` from the Blueprint database.
-5. Apply committed Prisma migrations from a trusted environment.
-6. Deploy the API and, when paid worker capacity is desired, both workers.
+1. Validate the selected branch through GitHub Actions.
+2. Create or verify the CloudAMQP instance.
+3. Apply or sync `render.yaml`.
+4. Enter `RABBITMQ_URL` in Render secret settings.
+5. Let Render inject `DATABASE_URL`.
+6. Apply committed Prisma migrations from a trusted environment.
 7. Validate `/health/live`, `/health/ready`, `/health` and `/metrics`.
-8. Run the minimum API and asynchronous smoke flow.
+8. Run the API smoke flow.
+9. If both workers are active, validate Outbox publication, broker consumption and automation
+   results.
+10. Record only observed evidence; do not publish an assumed URL.
 
-## Rollback Strategy
+## Secrets
 
-The rollback strategy will be based on:
+Never commit:
 
-- Immutable Docker image tags
-- Database migration review
-- Versioned releases
-- Previous stable container image
-- Documented manual rollback steps
+- `DATABASE_URL`;
+- CloudAMQP `RABBITMQ_URL`;
+- `REDIS_URL` containing remote credentials;
+- registry tokens;
+- copied provider environment exports;
+- logs or screenshots that expose credentials.
 
-## Secrets Strategy
+`.env.example` documents variable names and safe local defaults only.
 
-Secrets must not be committed to the repository.
+## Limitations
 
-Secrets are managed using:
+The public demo is intentionally free or low-cost and limited:
 
-- `.env.example` for local variable names and non-secret examples;
-- GitHub Actions secrets when a workflow needs credentials;
-- Render secret environment variables for deployment URLs;
-- CloudAMQP's console for RabbitMQ credentials.
+- a Render Free Web Service can sleep while idle and cold-start on the next request;
+- free database availability, retention and quotas are provider-controlled;
+- Render Background Workers can incur charges;
+- CloudAMQP shared plans have connection, channel, queue, throughput and storage limits;
+- the demo has no production availability, backup, disaster recovery or service-level objective;
+- only synthetic data should be used.
 
-Real `DATABASE_URL`, `RABBITMQ_URL`, `REDIS_URL` and registry tokens must never be committed.
+Provider plan names and limits can change. Confirm current values in provider dashboards before
+creating resources.
+
+## Rollback
+
+The intended rollback strategy uses:
+
+- immutable GHCR tags;
+- reviewed Prisma migrations;
+- versioned releases;
+- a previously validated container image;
+- documented manual provider steps.
+
+Database rollback is not implied by redeploying an older application image and must be evaluated
+separately.
 
 ## Deployment Status
 
-Current status:
+Phase 22 added the first Render deployment runbook. The repository does not currently contain a
+validated public URL or completed evidence record, so the documentation must be treated as an
+execution guide rather than proof that the demo is online.
 
-- Continuous integration is implemented for pull requests and pushes to `develop` and `main`.
-- Docker image builds are validated without publishing images.
-- Production application images are published to GitHub Container Registry from `main`, version
-  tags and manual workflow executions.
-- `render.yaml` defines the API, both workers and PostgreSQL.
-- Render and CloudAMQP are the active Deployment direction.
-- The public environment is explicitly limited and not production.
-- Docker Compose remains the complete local reference environment.
+See:
 
-See [Render Deployment](render-deployment.md), [CloudAMQP](cloudamqp.md) and
-[Deployment](portfolio-deployment.md).
+- [Render Deployment](render-deployment.md)
+- [CloudAMQP](cloudamqp.md)
+- [Portfolio Deployment](portfolio-deployment.md)
+- [API Examples](api-examples.md)

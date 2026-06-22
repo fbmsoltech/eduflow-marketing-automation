@@ -9,21 +9,22 @@ complete asynchronous flow when paid worker capacity is enabled.
 This environment is a public portfolio demonstration, not a production environment. Use only
 synthetic data.
 
-Phase 22 status:
+Phase 22 documented the first-deployment runbook, but the repository does not contain completed
+provider evidence. Current documentation status:
 
 ```txt
-Deploy executed: TODO
-Public API URL: TODO
-CloudAMQP instance: TODO
-Prisma migrations: TODO
-Health checks: TODO
-Workers: TODO
-Outbox publication: TODO
-Automation result: TODO
+Deploy executed: PENDING EVIDENCE
+Public API URL: RENDER_API_URL
+CloudAMQP instance: PENDING EVIDENCE
+Prisma migrations: PENDING EVIDENCE
+Health checks: PENDING EVIDENCE
+Workers: PENDING EVIDENCE
+Outbox publication: PENDING EVIDENCE
+Automation result: PENDING EVIDENCE
 ```
 
-No public URL or successful check should be recorded until it has been observed in the provider
-dashboards or through an HTTP request.
+`RENDER_API_URL` is a placeholder. No public URL or successful check should be recorded until it
+has been observed in the provider dashboards and verified through an HTTP request.
 
 ## Architecture
 
@@ -120,13 +121,13 @@ existing Blueprint or a rotated credential, update the variable manually in the 
 Open each service's **Events** page and wait for its deploy to finish. A successful image build does
 not prove that the database schema, broker connection or workers are healthy.
 
-Record:
+Record only observed results:
 
 ```txt
-API deploy event: TODO
-Outbox Worker deploy event: TODO
-Automation Worker deploy event: TODO
-PostgreSQL available: TODO
+API deploy event:
+Outbox Worker deploy event:
+Automation Worker deploy event:
+PostgreSQL available:
 ```
 
 ### 6. Apply Prisma migrations
@@ -167,9 +168,9 @@ Expected Prisma output must show the committed migration as applied or report th
 migrations exist. Record the result without copying the database URL:
 
 ```txt
-Migration command date: TODO
-Migration result: TODO
-Applied migration: TODO
+Migration command date:
+Migration result:
+Applied migration:
 ```
 
 On a paid service, a future deployment change may add a Render pre-deploy migration command, but it
@@ -183,7 +184,7 @@ Copy the `onrender.com` URL displayed on the `eduflow-api` service page and set 
 PowerShell:
 
 ```powershell
-$env:API_URL = 'https://<service-name>.onrender.com'
+$env:API_URL = 'RENDER_API_URL'
 curl.exe --fail-with-body "$env:API_URL/health/live"
 curl.exe --fail-with-body "$env:API_URL/health/ready"
 curl.exe --fail-with-body "$env:API_URL/health"
@@ -193,7 +194,7 @@ curl.exe --fail-with-body "$env:API_URL/metrics"
 Bash:
 
 ```bash
-export API_URL='https://<service-name>.onrender.com'
+export API_URL='RENDER_API_URL'
 curl --fail-with-body "$API_URL/health/live"
 curl --fail-with-body "$API_URL/health/ready"
 curl --fail-with-body "$API_URL/health"
@@ -215,12 +216,15 @@ after 15 minutes without inbound traffic.
 Use unique slugs, email addresses and idempotency keys when repeating this test. The examples below
 use placeholders that must be replaced with IDs returned by previous requests.
 
+The maintained end-to-end curl walkthrough is available in [API Examples](api-examples.md). The
+short sequence below is retained as a deployment smoke test.
+
 Create an organization:
 
 ```bash
 curl --fail-with-body -X POST "$API_URL/organizations" \
   -H "Content-Type: application/json" \
-  -d '{"name":"EduFlow Portfolio Demo","slug":"eduflow-portfolio-demo-TODO"}'
+  -d '{"name":"EduFlow Portfolio Demo","slug":"eduflow-portfolio-demo-001"}'
 ```
 
 Create a campaign:
@@ -229,9 +233,9 @@ Create a campaign:
 curl --fail-with-body -X POST "$API_URL/campaigns" \
   -H "Content-Type: application/json" \
   -d '{
-    "organizationId":"<organization-id>",
+    "organizationId":"ORGANIZATION_ID",
     "name":"Render First Deploy",
-    "slug":"render-first-deploy-TODO"
+    "slug":"render-first-deploy-001"
   }'
 ```
 
@@ -241,9 +245,9 @@ Create a lead:
 curl --fail-with-body -X POST "$API_URL/leads" \
   -H "Content-Type: application/json" \
   -d '{
-    "organizationId":"<organization-id>",
-    "campaignId":"<campaign-id>",
-    "email":"render-demo-TODO@example.com",
+    "organizationId":"ORGANIZATION_ID",
+    "campaignId":"CAMPAIGN_ID",
+    "email":"render-demo-001@example.com",
     "fullName":"Render Demo Lead"
   }'
 ```
@@ -254,8 +258,8 @@ Create an automation that changes both score and status:
 curl --fail-with-body -X POST "$API_URL/automations" \
   -H "Content-Type: application/json" \
   -d '{
-    "organizationId":"<organization-id>",
-    "campaignId":"<campaign-id>",
+    "organizationId":"ORGANIZATION_ID",
+    "campaignId":"CAMPAIGN_ID",
     "name":"Score submitted forms",
     "triggerEventType":"form.submitted",
     "conditions":[],
@@ -269,7 +273,7 @@ curl --fail-with-body -X POST "$API_URL/automations" \
 Activate it:
 
 ```bash
-curl --fail-with-body -X PATCH "$API_URL/automations/<automation-id>/status" \
+curl --fail-with-body -X PATCH "$API_URL/automations/AUTOMATION_ID/status" \
   -H "Content-Type: application/json" \
   -d '{"status":"ACTIVE"}'
 ```
@@ -280,14 +284,14 @@ Create the matching LeadEvent:
 curl --fail-with-body -X POST "$API_URL/lead-events" \
   -H "Content-Type: application/json" \
   -d '{
-    "organizationId":"<organization-id>",
-    "campaignId":"<campaign-id>",
-    "leadId":"<lead-id>",
+    "organizationId":"ORGANIZATION_ID",
+    "campaignId":"CAMPAIGN_ID",
+    "leadId":"LEAD_ID",
     "eventType":"form.submitted",
-    "occurredAt":"<current-iso-date>",
+    "occurredAt":"2026-06-22T12:00:00.000Z",
     "payload":{"source":"render-first-deploy"},
-    "correlationId":"render-first-deploy-TODO",
-    "idempotencyKey":"render-first-deploy-TODO"
+    "correlationId":"render-first-deploy-001",
+    "idempotencyKey":"ORGANIZATION_ID:form.submitted:render-first-deploy-001"
   }'
 ```
 
@@ -295,7 +299,7 @@ Wait at least one Outbox Publisher interval, then validate:
 
 ```bash
 curl --fail-with-body "$API_URL/outbox/messages"
-curl --fail-with-body "$API_URL/leads/<lead-id>"
+curl --fail-with-body "$API_URL/leads/LEAD_ID"
 curl --fail-with-body "$API_URL/metrics"
 ```
 
@@ -410,24 +414,24 @@ database, reapply committed migrations and rerun the synthetic smoke test.
 Fill this section only after execution:
 
 ```txt
-Execution date: TODO
-Git commit deployed: TODO
-Public API URL: TODO
-CloudAMQP plan/region (no credentials): TODO
-Render plans/region: TODO
-Migration result: TODO
-/health/live: TODO
-/health/ready: TODO
-/health: TODO
-/metrics: TODO
-Organization/Campaign/Lead created: TODO
-Automation activated: TODO
-LeadEvent created: TODO
-OutboxMessage PUBLISHED: TODO
-Automation Worker consumed: TODO
-Lead score/status changed: TODO
-Observed limitations: TODO
-Required adjustments: TODO
+Execution date:
+Git commit deployed:
+Public API URL:
+CloudAMQP plan/region (no credentials):
+Render plans/region:
+Migration result:
+/health/live:
+/health/ready:
+/health:
+/metrics:
+Organization/Campaign/Lead created:
+Automation activated:
+LeadEvent created:
+OutboxMessage PUBLISHED:
+Automation Worker consumed:
+Lead score/status changed:
+Observed limitations:
+Required adjustments:
 ```
 
 ## GHCR and Local Reference
