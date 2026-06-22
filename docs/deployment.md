@@ -87,6 +87,29 @@ The application will be split into multiple container apps:
 - `eduflow-automation-worker`
 - `eduflow-webhook-worker`
 
+## Continuous Integration
+
+GitHub Actions validates pull requests and pushes targeting `develop` or `main`.
+
+The `CI` workflow:
+
+1. Uses Node.js 22 with npm dependency caching.
+2. Starts PostgreSQL 16, Redis 7 and RabbitMQ 3 service containers.
+3. Installs dependencies with `npm ci`.
+4. Generates Prisma Client and applies existing migrations.
+5. Runs lint, formatting checks, unit tests, end-to-end tests and the TypeScript build.
+
+The CI environment disables the Outbox Publisher and Automation Worker loops. The service
+containers are available to validation commands, but the workflow does not start long-running
+application or worker processes.
+
+The `Docker Build` workflow uses Docker Buildx to build the repository `Dockerfile` with the local
+tag `eduflow-marketing-automation:ci`. The image is loaded only into the workflow runner and is not
+published to a registry.
+
+This phase does not configure remote deployment, production secrets, Azure resources or container
+image publication.
+
 ## Deployment Flow
 
 ### Development
@@ -166,4 +189,6 @@ Secrets will be managed using:
 
 Current status:
 
-- Not implemented yet
+- Continuous integration is implemented for pull requests and pushes to `develop` and `main`.
+- Docker image builds are validated without publishing images.
+- Remote deployment is not implemented yet.
