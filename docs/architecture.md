@@ -293,7 +293,12 @@ The application should expose logs, metrics and traces.
 
 ### Logs
 
-Logs should be structured and include:
+API and worker logs are emitted as JSON through Pino. HTTP requests reuse the incoming
+`x-correlation-id` header or generate a UUID, return it in the response and include it in
+request-scoped logs. Worker events include processing identifiers, routing information, result
+counts, durations and errors where relevant.
+
+Structured fields include:
 
 - correlationId
 - causationId
@@ -304,18 +309,21 @@ Logs should be structured and include:
 
 ### Metrics
 
-Planned metrics:
+The API exposes current PostgreSQL-backed gauges at `GET /metrics`:
 
 ```txt
-eduflow_events_received_total
-eduflow_events_processed_total
-eduflow_events_failed_total
-eduflow_automation_executions_total
-eduflow_automation_execution_duration_seconds
-eduflow_webhook_delivery_attempts_total
-eduflow_webhook_delivery_failures_total
-eduflow_dead_letter_messages_total
+eduflow_outbox_pending_total
+eduflow_outbox_published_total
+eduflow_outbox_failed_total
+eduflow_dead_letters_pending_total
+eduflow_dead_letters_ignored_total
+eduflow_automation_executions_succeeded_total
+eduflow_automation_executions_failed_total
+eduflow_automation_flows_active_total
 ```
+
+`GET /health/live` reports process liveness. `GET /health/ready` checks PostgreSQL and RabbitMQ.
+Prometheus deployment, Grafana dashboards and complete OpenTelemetry tracing remain planned.
 
 ### Traces
 

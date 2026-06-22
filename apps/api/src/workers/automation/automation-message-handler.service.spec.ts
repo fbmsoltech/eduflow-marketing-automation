@@ -39,9 +39,17 @@ describe('AutomationMessageHandlerService', () => {
       }),
     );
     expect(execute).toHaveBeenCalledWith('lead-event-1');
-    expect(log).toHaveBeenCalledWith(
-      'Automation engine executed: leadEventId=lead-event-1 eventType=email.clicked matched=2 executed=1 skipped=1 failed=0',
-    );
+    expect(log).toHaveBeenCalledWith({
+      event: 'automation.engine.executed',
+      messageId: 'message-1',
+      correlationId: 'corr-1',
+      leadEventId: 'lead-event-1',
+      eventType: 'email.clicked',
+      matchedFlows: 2,
+      executedFlows: 1,
+      skippedFlows: 1,
+      failedFlows: 0,
+    });
   });
 
   it('ignores valid messages for another aggregate type', async () => {

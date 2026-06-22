@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PublishPendingOutboxMessagesUseCase } from '../../application/outbox/use-cases/publish-pending-outbox-messages.use-case';
 
 const DEFAULT_OUTBOX_PUBLISHER_INTERVAL_MS = 5_000;
@@ -22,7 +23,9 @@ export class OutboxPublisherService implements OnApplicationBootstrap, BeforeApp
 
   onApplicationBootstrap(): void {
     if (!this.isEnabled()) {
-      this.logger.log('Outbox publisher worker is disabled');
+      this.logger.log({
+        event: 'outbox.worker.disabled',
+      });
 
       return;
     }
@@ -32,7 +35,10 @@ export class OutboxPublisherService implements OnApplicationBootstrap, BeforeApp
       DEFAULT_OUTBOX_PUBLISHER_INTERVAL_MS,
     );
 
-    this.logger.log(`Outbox publisher worker started with interval ${intervalMs}ms`);
+    this.logger.log({
+      event: 'outbox.worker.started',
+      intervalMs,
+    });
     void this.runCycle();
     this.interval = setInterval(() => void this.runCycle(), intervalMs);
   }
@@ -44,12 +50,17 @@ export class OutboxPublisherService implements OnApplicationBootstrap, BeforeApp
     }
 
     await this.activeCycle;
-    this.logger.log('Outbox publisher worker stopped');
+    this.logger.log({
+      event: 'outbox.worker.stopped',
+    });
   }
 
   runCycle(): Promise<void> {
     if (this.isCycleRunning) {
-      this.logger.warn('Outbox publisher cycle skipped because another cycle is running');
+      this.logger.warn({
+        event: 'outbox.cycle.skipped',
+        reason: 'cycle_already_running',
+      });
 
       return Promise.resolve();
     }
@@ -69,17 +80,31 @@ export class OutboxPublisherService implements OnApplicationBootstrap, BeforeApp
       process.env['OUTBOX_PUBLISH_LIMIT'],
       DEFAULT_OUTBOX_PUBLISH_LIMIT,
     );
+    const cycleId = randomUUID();
+    const startedAt = Date.now();
 
-    this.logger.log(`Outbox publisher cycle started with limit ${limit}`);
+    this.logger.log({
+      event: 'outbox.cycle.started',
+      cycleId,
+      limit,
+    });
 
     try {
       const result = await this.publishPendingOutboxMessagesUseCase.execute(limit);
 
-      this.logger.log(
-        `Outbox publisher cycle finished: processed=${result.processed} published=${result.published} failed=${result.failed}`,
-      );
+      this.logger.log({
+        event: 'outbox.cycle.finished',
+        cycleId,
+        durationMs: Date.now() - startedAt,
+        ...result,
+      });
     } catch (error) {
-      this.logger.error(`Outbox publisher cycle failed: ${this.getErrorMessage(error)}`);
+      this.logger.error({
+        event: 'outbox.cycle.failed',
+        cycleId,
+        durationMs: Date.now() - startedAt,
+        error: this.getErrorMessage(error),
+      });
     }
   }
 

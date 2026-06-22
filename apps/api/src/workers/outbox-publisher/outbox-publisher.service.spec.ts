@@ -35,7 +35,9 @@ describe('OutboxPublisherService', () => {
     service.onApplicationBootstrap();
     await jest.advanceTimersByTimeAsync(10_000);
     expect(execute).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith('Outbox publisher worker is disabled');
+    expect(log).toHaveBeenCalledWith({
+      event: 'outbox.worker.disabled',
+    });
   });
 
   it('runs immediately and periodically with the configured publish limit', async () => {
@@ -61,7 +63,12 @@ describe('OutboxPublisherService', () => {
     expect(execute).toHaveBeenCalledWith(25);
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 1_000);
     expect(log).toHaveBeenCalledWith(
-      'Outbox publisher cycle finished: processed=2 published=1 failed=1',
+      expect.objectContaining({
+        event: 'outbox.cycle.finished',
+        processed: 2,
+        published: 1,
+        failed: 1,
+      }),
     );
   });
 
@@ -80,9 +87,10 @@ describe('OutboxPublisherService', () => {
     await service.runCycle();
 
     expect(execute).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(
-      'Outbox publisher cycle skipped because another cycle is running',
-    );
+    expect(warn).toHaveBeenCalledWith({
+      event: 'outbox.cycle.skipped',
+      reason: 'cycle_already_running',
+    });
 
     resolveCycle?.({ processed: 0, published: 0, failed: 0 });
     await firstCycle;
@@ -99,6 +107,11 @@ describe('OutboxPublisherService', () => {
     await expect(service.runCycle()).resolves.toBeUndefined();
 
     expect(execute).toHaveBeenCalledTimes(2);
-    expect(error).toHaveBeenCalledWith('Outbox publisher cycle failed: Database unavailable');
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'outbox.cycle.failed',
+        error: 'Database unavailable',
+      }),
+    );
   });
 });
