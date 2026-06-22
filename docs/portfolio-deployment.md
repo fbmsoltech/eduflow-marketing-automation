@@ -2,140 +2,162 @@
 
 ## Decision
 
-EduFlow uses Render and CloudAMQP as the active public-demo deployment strategy.
+EduFlow uses Render and CloudAMQP as the active deployment strategy for its public portfolio demo.
 
-The project exists exclusively as a backend engineering portfolio project. Render provides the
-public Web Service and PostgreSQL, while CloudAMQP preserves the RabbitMQ-based event-driven
-architecture without operating a broker inside Render.
+The project is exclusively a backend engineering portfolio case study. Render provides the public
+API and PostgreSQL, while CloudAMQP provides external RabbitMQ without adding the cost and
+operational work of a larger cloud platform.
 
-Azure is not an active deployment target. It may be revisited only as a future infrastructure
-exercise, and no Azure provisioning code is maintained as part of the current strategy.
+Azure was replaced as the active strategy to reduce cost and complexity. It is not provisioned or
+maintained by this repository and should not be described as the current deployment target.
 
-## Status
+## Current Evidence
 
-The first real Render deployment has not been recorded in the repository yet.
-
-```txt
-Public API URL: TODO
-Deploy validated: TODO
-CloudAMQP validated: TODO
-Migrations applied: TODO
-API health validated: TODO
-Workers validated: TODO
-Outbox validated: TODO
-Automation validated: TODO
-```
-
-Until those fields are replaced with observed evidence, the deployment documentation is a runbook,
-not a claim that the public demo is online.
-
-## Public Demo Scope
-
-The intended remote architecture is:
-
-- `eduflow-api` as a Render Web Service;
-- `eduflow-postgres` as Render PostgreSQL;
-- CloudAMQP as external RabbitMQ;
-- `eduflow-outbox-worker` and `eduflow-automation-worker` as optional paid Render Background
-  Workers;
-- GHCR as the registry for versioned Docker images.
-
-The repository Blueprint builds the Dockerfile directly from source. The GHCR publication workflow
-remains available as release evidence and as an alternative manual image source.
-
-## Observed and Expected Limitations
-
-No provider limitation has been marked as observed in a completed EduFlow deployment yet. The
-following documented provider constraints must be expected and verified during execution:
-
-- a Render Free Web Service spins down after 15 minutes without inbound traffic;
-- waking a Free Web Service can take about a minute;
-- Render Background Workers do not support the Free instance type and can incur charges;
-- a Free Render Postgres database expires 30 days after creation;
-- a Render workspace can have only one active Free Postgres database;
-- Free services have monthly usage, bandwidth and build limits;
-- CloudAMQP free or shared plans limit connections, channels, queues, throughput, transfer or
-  storage according to the selected plan;
-- provider logs and retained demo data are limited and are not guaranteed;
-- the public demo has no high availability, disaster recovery, private networking or production
-  service-level objective.
-
-After the first deployment, move only confirmed items into the evidence record:
+The repository does not contain a validated public URL or completed deployment evidence.
 
 ```txt
-Observed cold start: TODO
-Observed deploy duration: TODO
-Observed database expiration date: TODO
-Observed worker cost/plan: TODO
-Observed CloudAMQP quota: TODO
-Other observed limitation: TODO
+Public API URL: RENDER_API_URL
+Deploy validated: PENDING
+CloudAMQP validated: PENDING
+Migrations applied: PENDING
+API health validated: PENDING
+Workers validated: PENDING
+Outbox validated: PENDING
+Automation validated: PENDING
 ```
 
-## Cost-Controlled Modes
+`RENDER_API_URL` is a placeholder, not a claim that the public service is available. Replace it
+only after verification through the Render dashboard and an HTTP request.
 
-### Complete remote demo
-
-Deploy the API, PostgreSQL, CloudAMQP and both paid Background Workers. This mode can demonstrate
-the full Outbox and Automation flow remotely, but it can incur Render worker charges.
+## Public Demo Modes
 
 ### API-only remote demo
 
-Deploy only the Free API and temporary PostgreSQL, with CloudAMQP connectivity used by readiness.
-Keep workers suspended or uncreated. This mode validates the public HTTP API and persistence but
-must not be described as a successful remote asynchronous automation deployment.
+This cost-controlled mode runs the API and PostgreSQL publicly. CloudAMQP can be configured for
+readiness checks and diagnostic publication, while paid Background Workers remain suspended or
+uncreated.
+
+It demonstrates:
+
+- public HTTP access;
+- request validation and use cases;
+- PostgreSQL persistence;
+- LeadEvent and Outbox creation;
+- health and metrics endpoints.
+
+It does not demonstrate automatic remote Outbox publication or Automation consumption.
+
+### Complete remote demo
+
+This mode adds the Outbox Publisher Worker and Automation Worker on Render.
+
+It demonstrates:
+
+- automatic Outbox polling;
+- RabbitMQ publication through CloudAMQP;
+- topic routing and message consumption;
+- Automation Engine execution;
+- score, status, task and webhook actions.
+
+Render Background Workers can incur charges, so this mode is optional for the portfolio.
 
 ### Complete local demo
 
-Docker Compose remains the authoritative complete stack:
+Docker Compose is the authoritative complete environment:
 
 ```bash
 npm run docker:build
 npm run docker:up
 ```
 
-It runs PostgreSQL, Redis, RabbitMQ and its management interface, Prisma migrations, the API, the
-Outbox Publisher Worker and the Automation Worker.
+It runs PostgreSQL, Redis, RabbitMQ, migrations, the API and both workers without depending on paid
+remote worker capacity.
+
+## Demo Limitations
+
+The public deployment is free or low-cost by design and is not production:
+
+- a Render Free Web Service may sleep while idle;
+- the first request after an idle period may experience a cold start;
+- free database retention and availability are limited;
+- Background Workers require a reviewed paid plan;
+- CloudAMQP free or shared plans impose provider-specific quotas;
+- logs and demonstration data can be temporary;
+- no high availability, disaster recovery or production service-level objective is claimed.
+
+Plan details can change. Record a limit as observed only after confirming it in the provider
+dashboard or deployment behavior.
 
 ## Data and Security Boundaries
 
-The public environment must use only synthetic demonstration data. It must not receive real
-student, candidate, customer, organization or personal data.
+Use only synthetic data in the public environment. Do not submit real student, candidate, customer,
+organization or personal data.
 
-Secrets must stay in provider secret settings or trusted local session variables:
+Secrets belong in provider settings or trusted local session variables:
 
-- `DATABASE_URL` comes from Render Postgres;
-- `RABBITMQ_URL` comes from CloudAMQP;
-- neither value is committed to Git;
-- `.env.example` documents names and local-only examples, not remote credentials.
+- Render injects `DATABASE_URL`;
+- CloudAMQP supplies `RABBITMQ_URL`;
+- `.env.example` contains local-only examples;
+- no remote credential should appear in Git, documentation, logs, screenshots, issues or pull
+  requests.
 
-If a credential appears in Git history, logs, screenshots, issues or pull requests, rotate it
-immediately.
+Rotate any credential that may have been exposed.
+
+## Validation Criteria
+
+The API-only demo is validated when there is evidence for:
+
+1. successful deployment and committed Prisma migrations;
+2. `/health/live`, `/health/ready`, `/health` and `/metrics`;
+3. Organization, Campaign and Lead creation;
+4. LeadEvent and OutboxMessage creation.
+
+The complete remote demo additionally requires:
+
+1. OutboxMessage transition to `PUBLISHED`;
+2. successful CloudAMQP routing;
+3. Automation Worker consumption;
+4. successful AutomationExecution;
+5. expected lead score or status changes;
+6. worker logs correlated with the test event.
+
+Use [API Examples](api-examples.md) for the functional walkthrough.
+
+## Evidence Template
+
+Complete this only with observed, non-sensitive data:
+
+```txt
+Execution date:
+Git commit:
+Public API URL:
+Render plans and region:
+CloudAMQP plan and region:
+Migration result:
+/health/live:
+/health/ready:
+/health:
+/metrics:
+API flow:
+Outbox publication:
+Automation consumption:
+Lead result:
+Observed cold start:
+Observed provider limits:
+```
+
+Do not include database URLs, broker hostnames, usernames, passwords, virtual hosts or tokens.
 
 ## Production Disclaimer
 
 EduFlow is not operated as a production service. The public demo does not claim production-grade:
 
-- availability or scaling;
+- availability or autoscaling guarantees;
 - backup and restore;
-- security hardening;
-- automated secret rotation;
+- security hardening or secret rotation;
 - incident response;
-- data retention;
-- regulatory compliance;
+- data retention or regulatory compliance;
 - complete monitoring coverage.
 
-## Validation Record
-
-The deploy is considered demonstrated only when evidence exists for:
-
-1. successful Prisma migration deployment;
-2. `/health/live`, `/health/ready`, `/health` and `/metrics`;
-3. creation of an Organization, Campaign and Lead;
-4. creation and activation of an Automation;
-5. creation of a matching LeadEvent;
-6. OutboxMessage transition to `PUBLISHED`;
-7. worker publication and consumption logs;
-8. expected lead score and status changes.
-
-Use [Render Deployment](render-deployment.md) for the execution runbook and
-[CloudAMQP](cloudamqp.md) for broker inspection.
+See [Render Deployment](render-deployment.md) for the runbook and
+[CloudAMQP](cloudamqp.md) for broker validation.

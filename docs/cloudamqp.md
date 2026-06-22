@@ -5,18 +5,19 @@
 CloudAMQP provides the external RabbitMQ broker for the Render deployment. RabbitMQ is not hosted
 inside Render and is not created by `render.yaml`.
 
-status:
+The instance and topology must be confirmed from provider evidence before they are marked as
+validated:
 
 ```txt
-Instance created: TODO
-Plan: TODO
-Provider/region: TODO
-RABBITMQ_URL configured in Render: TODO
-API connection observed: TODO
-Outbox Worker connection observed: TODO
-Automation Worker connection observed: TODO
-Exchange observed: TODO
-Queue and consumer observed: TODO
+Instance created: PENDING EVIDENCE
+Plan: PENDING EVIDENCE
+Provider/region: PENDING EVIDENCE
+RABBITMQ_URL configured in Render: PENDING EVIDENCE
+API connection observed: PENDING EVIDENCE
+Outbox Worker connection observed: PENDING EVIDENCE
+Automation Worker connection observed: PENDING EVIDENCE
+Exchange observed: PENDING EVIDENCE
+Queue and consumer observed: PENDING EVIDENCE
 ```
 
 Do not record the broker hostname, username, password, virtual host or complete connection URL in
@@ -94,7 +95,7 @@ the number of observed connections can vary as health checks run and connections
 First check the API:
 
 ```bash
-curl --fail-with-body https://<api-url>/health/ready
+curl --fail-with-body RENDER_API_URL/health/ready
 ```
 
 Then open the CloudAMQP management interface from the instance page.
@@ -204,7 +205,8 @@ Automation Worker logs and queue consumer count.
 
 ## Plan Limitations
 
-CloudAMQP free or shared plans are suitable only for this public portfolio demo. Limits can include:
+CloudAMQP free or shared plans are suitable only for this public portfolio demo. Limits can
+include:
 
 - a small number of simultaneous connections;
 - channel limits per connection;
@@ -214,13 +216,17 @@ CloudAMQP free or shared plans are suitable only for this public portfolio demo.
 - no production availability commitment for the demo.
 
 Record only limits actually observed during deployment. Do not claim a limit was reached without
-provider evidence.
+provider evidence. Plan names and quotas can change, so confirm current values in the CloudAMQP
+console before creating the instance.
 
 ## Local Reference
 
 Docker Compose remains the complete local reference and runs RabbitMQ with its management
 interface. The local-only URL and credentials documented in `.env.example` are not CloudAMQP
 credentials.
+
+This keeps the complete asynchronous flow reproducible even when Render Background Workers are not
+enabled for cost reasons.
 
 ## Provider References
 
