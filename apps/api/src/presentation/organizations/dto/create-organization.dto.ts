@@ -1,10 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateOrganizationDto {
-  constructor(
-    readonly name: string,
-    readonly slug: string,
-  ) {}
+  @ApiProperty({ example: 'Academic League' })
+  readonly name: string;
+
+  @ApiProperty({ example: 'academic-league' })
+  readonly slug: string;
+
+  constructor(name: string, slug: string) {
+    this.name = name;
+    this.slug = slug;
+  }
 
   static fromBody(body: unknown): CreateOrganizationDto {
     if (!this.isRecord(body)) {

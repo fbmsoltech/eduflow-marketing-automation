@@ -9,6 +9,18 @@ import {
   Post,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiInternalServerErrorResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
   InvalidOrganizationNameError,
   InvalidOrganizationSlugError,
 } from '../../domain/organizations/organization.entity';
@@ -21,7 +33,13 @@ import { FindOrganizationByIdUseCase } from '../../application/organizations/use
 import { ListOrganizationsUseCase } from '../../application/organizations/use-cases/list-organizations.use-case';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { OrganizationResponseDto } from './dto/organization-response.dto';
+import { ErrorResponseDto } from '../common/dto/error-response.dto';
 
+@ApiTags('Organizations')
+@ApiInternalServerErrorResponse({
+  description: 'Unexpected internal server error',
+  type: ErrorResponseDto,
+})
 @Controller('organizations')
 export class OrganizationsController {
   constructor(
@@ -31,6 +49,11 @@ export class OrganizationsController {
   ) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create Organization' })
+  @ApiBody({ type: CreateOrganizationDto })
+  @ApiCreatedResponse({ description: 'Organization created', type: OrganizationResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid request payload', type: ErrorResponseDto })
+  @ApiConflictResponse({ description: 'Organization slug already exists', type: ErrorResponseDto })
   async create(@Body() body: unknown): Promise<OrganizationResponseDto> {
     const dto = CreateOrganizationDto.fromBody(body);
 
@@ -47,6 +70,12 @@ export class OrganizationsController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'List organizations' })
+  @ApiOkResponse({
+    description: 'Organizations returned',
+    type: OrganizationResponseDto,
+    isArray: true,
+  })
   async list(): Promise<OrganizationResponseDto[]> {
     const organizations = await this.listOrganizationsUseCase.execute();
 
@@ -54,6 +83,10 @@ export class OrganizationsController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get organization by ID' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Organization ID' })
+  @ApiOkResponse({ description: 'Organization returned', type: OrganizationResponseDto })
+  @ApiNotFoundResponse({ description: 'Organization not found', type: ErrorResponseDto })
   async findById(@Param('id') id: string): Promise<OrganizationResponseDto> {
     try {
       const organization = await this.findOrganizationByIdUseCase.execute(id);

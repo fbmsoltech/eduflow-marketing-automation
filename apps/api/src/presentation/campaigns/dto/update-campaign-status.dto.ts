@@ -1,8 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty } from '@nestjs/swagger';
 import { CampaignStatus } from '../../../domain/campaigns/campaign.entity';
 
 export class UpdateCampaignStatusDto {
-  constructor(readonly status: CampaignStatus) {}
+  @ApiProperty({ enum: CampaignStatus, example: CampaignStatus.ACTIVE })
+  readonly status: CampaignStatus;
+
+  constructor(status: CampaignStatus) {
+    this.status = status;
+  }
 
   static fromBody(body: unknown): UpdateCampaignStatusDto {
     if (!this.isRecord(body)) {

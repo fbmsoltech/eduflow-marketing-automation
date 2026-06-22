@@ -1,7 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateLeadScoreDto {
-  constructor(readonly score: number) {}
+  @ApiProperty({ example: 30, minimum: 0 })
+  readonly score: number;
+
+  constructor(score: number) {
+    this.score = score;
+  }
 
   static fromBody(body: unknown): UpdateLeadScoreDto {
     if (!this.isRecord(body)) {

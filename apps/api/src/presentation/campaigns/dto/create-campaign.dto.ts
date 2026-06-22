@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CampaignMetadata, CampaignMetadataValue } from '../../../domain/campaigns/campaign.entity';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -6,14 +7,53 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export class CreateCampaignDto {
+  @ApiProperty({ example: 'ORGANIZATION_ID', format: 'uuid' })
+  readonly organizationId: string;
+
+  @ApiProperty({ example: 'Selection Process 2026' })
+  readonly name: string;
+
+  @ApiProperty({ example: 'selection-process-2026' })
+  readonly slug: string;
+
+  @ApiPropertyOptional({
+    example: '2026-03-01T00:00:00.000Z',
+    format: 'date-time',
+    type: String,
+  })
+  readonly startsAt?: Date;
+
+  @ApiPropertyOptional({
+    example: '2026-03-20T23:59:59.000Z',
+    format: 'date-time',
+    type: String,
+  })
+  readonly endsAt?: Date;
+
+  @ApiPropertyOptional({
+    example: {
+      channel: 'instagram',
+    },
+    type: 'object',
+    additionalProperties: true,
+  })
+  readonly metadata?: CampaignMetadata;
+
   constructor(
-    readonly organizationId: string,
-    readonly name: string,
-    readonly slug: string,
-    readonly startsAt?: Date,
-    readonly endsAt?: Date,
-    readonly metadata?: CampaignMetadata,
-  ) {}
+    organizationId: string,
+    name: string,
+    slug: string,
+    startsAt?: Date,
+    endsAt?: Date,
+    metadata?: CampaignMetadata,
+  ) {
+    this.organizationId = organizationId;
+    this.name = name;
+    this.slug = slug;
+    this.startsAt = startsAt;
+    this.endsAt = endsAt;
+    this.metadata = metadata;
+  }
 
   static fromBody(body: unknown): CreateCampaignDto {
     if (!this.isRecord(body)) {

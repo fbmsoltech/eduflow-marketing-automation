@@ -189,6 +189,8 @@ curl.exe --fail-with-body "$env:API_URL/health/live"
 curl.exe --fail-with-body "$env:API_URL/health/ready"
 curl.exe --fail-with-body "$env:API_URL/health"
 curl.exe --fail-with-body "$env:API_URL/metrics"
+curl.exe --fail-with-body "$env:API_URL/docs"
+curl.exe --fail-with-body "$env:API_URL/docs-json"
 ```
 
 Bash:
@@ -199,6 +201,8 @@ curl --fail-with-body "$API_URL/health/live"
 curl --fail-with-body "$API_URL/health/ready"
 curl --fail-with-body "$API_URL/health"
 curl --fail-with-body "$API_URL/metrics"
+curl --fail-with-body "$API_URL/docs"
+curl --fail-with-body "$API_URL/docs-json"
 ```
 
 Expected results:
@@ -207,6 +211,12 @@ Expected results:
 - `/health/ready`: HTTP 200 with PostgreSQL and RabbitMQ status `up`;
 - `/health`: HTTP 200 with `status: ok`;
 - `/metrics`: HTTP 200 with Prometheus text metrics.
+- `/docs`: HTTP 200 with the interactive Swagger UI;
+- `/docs-json`: HTTP 200 with the OpenAPI document titled
+  `EduFlow Marketing Automation API`.
+
+Open `RENDER_API_URL/docs` in a browser and confirm that endpoints are grouped by module, schemas
+are visible and request examples can be loaded into **Try it out**. Use only synthetic demo data.
 
 The first request can take about a minute after an idle period because a Free Web Service spins down
 after 15 minutes without inbound traffic.
@@ -424,6 +434,8 @@ Migration result:
 /health/ready:
 /health:
 /metrics:
+/docs:
+/docs-json:
 Organization/Campaign/Lead created:
 Automation activated:
 LeadEvent created:
