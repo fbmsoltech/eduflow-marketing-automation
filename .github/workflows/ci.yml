@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://eduflow:eduflow@localhost:5432/eduflow?schema=public
+      REDIS_URL: redis://localhost:6379
+      RABBITMQ_URL: amqp://eduflow:eduflow@localhost:5672
+      RABBITMQ_EXCHANGE: eduflow.events
+      RABBITMQ_EXCHANGE_TYPE: topic
+      OUTBOX_PUBLISHER_ENABLED: 'false'
+      AUTOMATION_WORKER_ENABLED: 'false'
+      WEBHOOK_TIMEOUT_MS: 1000
+      WEBHOOK_MAX_ATTEMPTS: 1
+      WEBHOOK_RETRY_DELAY_MS: 100
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: eduflow
+          POSTGRES_USER: eduflow
+          POSTGRES_PASSWORD: eduflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eduflow -d eduflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: eduflow
+          RABBITMQ_DEFAULT_PASS: eduflow
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Run unit tests
+        run: npm run test
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
