@@ -6,7 +6,15 @@ The project simulates a real-world scenario where organizations need to capture 
 
 ## Current Status
 
-Project initialization.
+Local infrastructure phase.
+
+## Business Case
+
+Academic organizations, courses and communities often run campaigns to attract candidates, students or participants.
+
+Most of the follow-up process is manual: confirming registrations, reminding candidates, identifying engaged leads, creating follow-up tasks and tracking conversion metrics.
+
+EduFlow provides a marketing automation engine where each lead interaction can trigger rules and actions asynchronously.
 
 ## Main Goals
 
@@ -31,3 +39,111 @@ Project initialization.
 - Jest
 - GitHub Actions
 - Azure Container Apps
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [GitFlow Strategy](docs/gitflow.md)
+- [Deployment Strategy](docs/deployment.md)
+- [Local Development](docs/local-development.md)
+
+## Architecture Decision Records
+
+- [0001 - Use TypeScript and NestJS](docs/decisions/0001-use-typescript-nestjs.md)
+- [0002 - Use Event-Driven Architecture](docs/decisions/0002-use-event-driven-architecture.md)
+- [0003 - Use Outbox Pattern](docs/decisions/0003-use-outbox-pattern.md)
+
+## Local API
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the API locally:
+
+```bash
+npm run start:dev
+```
+
+The health endpoint is available at:
+
+```txt
+GET /health
+```
+
+## Local Infrastructure
+
+Start PostgreSQL, Redis and RabbitMQ:
+
+```bash
+npm run infra:up
+```
+
+Check service status:
+
+```bash
+npm run infra:ps
+```
+
+RabbitMQ Management UI is available at:
+
+```txt
+http://localhost:15672
+```
+
+Default local credentials are documented in `.env.example`.
+
+## Database
+
+Copy the example environment file before running Prisma commands:
+
+```bash
+cp .env.example .env
+```
+
+Generate Prisma Client:
+
+```bash
+npm run prisma:generate
+```
+
+Apply database migrations to the local PostgreSQL service:
+
+```bash
+npm run prisma:migrate:dev
+```
+
+Open Prisma Studio:
+
+```bash
+npm run prisma:studio
+```
+
+Build and test:
+
+```bash
+npm run build
+npm run lint
+npm run test
+npm run test:e2e
+```
+
+Format files:
+
+```bash
+npm run format
+```
+
+## Code Quality
+
+Local commits use Husky hooks.
+
+- `lint-staged` formats and lints staged files before commit.
+- `commitlint` validates commit messages using Conventional Commits.
+- Prettier and EditorConfig keep formatting consistent across editors.
+
+## Status
+
+This project is under active development.
