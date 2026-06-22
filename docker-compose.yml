@@ -1,3 +1,22 @@
+x-application-environment: &application-environment
+  NODE_ENV: production
+  LOG_LEVEL: info
+  DATABASE_URL: postgresql://eduflow:eduflow@postgres:5432/eduflow
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://eduflow:eduflow@rabbitmq:5672
+  RABBITMQ_EXCHANGE: eduflow.events
+  RABBITMQ_EXCHANGE_TYPE: topic
+  OUTBOX_PUBLISHER_ENABLED: 'true'
+  OUTBOX_PUBLISHER_INTERVAL_MS: 5000
+  OUTBOX_PUBLISH_LIMIT: 100
+  AUTOMATION_WORKER_ENABLED: 'true'
+  AUTOMATION_WORKER_QUEUE: eduflow.automation.events
+  AUTOMATION_WORKER_BINDING_KEY: lead-events.#
+  AUTOMATION_WORKER_PREFETCH: 10
+  WEBHOOK_TIMEOUT_MS: 5000
+  WEBHOOK_MAX_ATTEMPTS: 3
+  WEBHOOK_RETRY_DELAY_MS: 1000
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -52,6 +71,91 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - eduflow_local
+
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrations
+    container_name: eduflow-migrations
+    environment:
+      <<: *application-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+    networks:
+      - eduflow_local
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: application
+    container_name: eduflow-api
+    environment:
+      <<: *application-environment
+      APP_PORT: 3000
+    ports:
+      - '3000:3000'
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - eduflow_local
+
+  outbox-publisher-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: application
+    container_name: eduflow-outbox-publisher-worker
+    command: ['npm', 'run', 'start:worker:outbox:prod']
+    environment:
+      <<: *application-environment
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - eduflow_local
+
+  automation-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: application
+    container_name: eduflow-automation-worker
+    command: ['npm', 'run', 'start:worker:automation:prod']
+    environment:
+      <<: *application-environment
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - eduflow_local
 

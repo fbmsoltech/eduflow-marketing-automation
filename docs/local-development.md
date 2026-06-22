@@ -1,6 +1,7 @@
 # Local Development
 
-This document explains how to run EduFlow local infrastructure for development.
+This document explains how to run EduFlow locally, either with only its dependencies in Docker or
+with the API and workers running as containers.
 
 ## Requirements
 
@@ -53,6 +54,8 @@ Password: eduflow
 
 ## Start Services
 
+To start only PostgreSQL, Redis and RabbitMQ for application development on the host:
+
 ```bash
 npm run infra:up
 ```
@@ -74,6 +77,62 @@ Open RabbitMQ Management UI:
 ```txt
 http://localhost:15672
 ```
+
+## Run the Complete Stack with Docker Compose
+
+Build the production-oriented application image:
+
+```bash
+npm run docker:build
+```
+
+Start PostgreSQL, Redis, RabbitMQ, database migrations, the API and both workers:
+
+```bash
+npm run docker:up
+```
+
+Docker Compose uses service DNS names for internal connections:
+
+```txt
+DATABASE_URL=postgresql://eduflow:eduflow@postgres:5432/eduflow
+REDIS_URL=redis://redis:6379
+RABBITMQ_URL=amqp://eduflow:eduflow@rabbitmq:5672
+```
+
+The `migrations` service waits for PostgreSQL to become healthy, runs `prisma migrate deploy` once
+and exits successfully. The API and workers start only after migrations complete. The application
+image generates Prisma Client during its build and runs the compiled JavaScript from
+`dist/apps/api`.
+
+Check container status:
+
+```bash
+npm run docker:ps
+```
+
+Inspect application logs:
+
+```bash
+npm run docker:logs
+```
+
+Validate the API:
+
+```bash
+curl http://localhost:3000/health
+curl http://localhost:3000/health/ready
+curl http://localhost:3000/metrics
+```
+
+Stop the complete stack:
+
+```bash
+npm run docker:down
+```
+
+The API, Outbox Publisher Worker and Automation Worker share the same immutable application image
+and use different production commands. The workers run without exposing HTTP ports.
 
 ## Publish Pending Outbox Messages
 
@@ -218,6 +277,15 @@ Create and apply local development migrations:
 npm run prisma:migrate:dev
 ```
 
+Apply existing migrations without creating a new migration:
+
+```bash
+npm run prisma:migrate:deploy
+```
+
+When the complete Docker Compose stack starts, this command runs automatically in the one-shot
+`migrations` service.
+
 Open Prisma Studio:
 
 ```bash
@@ -228,9 +296,7 @@ If Prisma reports authentication errors while Docker Compose is running, check w
 
 ## Stop Services
 
-```bash
-npm run infra:down
-```
+Use `npm run infra:down` or `npm run docker:down`. Both commands stop the current Compose project.
 
 The Compose file uses named volumes:
 
