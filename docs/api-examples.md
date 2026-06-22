@@ -3,6 +3,16 @@
 This walkthrough exercises the main EduFlow flow with synthetic data. It works against the local
 API or a validated Render deployment.
 
+The same requests can be explored and executed interactively through Swagger UI:
+
+```txt
+Local: http://localhost:3000/docs
+Public demo: RENDER_API_URL/docs
+```
+
+Swagger shows request and response schemas, examples and documented status codes. Use the curl
+sequence below when a repeatable terminal-based walkthrough is preferable.
+
 Set the base URL before running the requests:
 
 ```bash

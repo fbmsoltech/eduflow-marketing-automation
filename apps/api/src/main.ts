@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { configureOpenApi } from './openapi';
 
 const DEFAULT_PORT = 3000;
 
@@ -21,6 +22,7 @@ function resolvePort(value: string | undefined): number {
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
+  configureOpenApi(app);
   const port = resolvePort(process.env['APP_PORT']);
 
   await app.listen(port);

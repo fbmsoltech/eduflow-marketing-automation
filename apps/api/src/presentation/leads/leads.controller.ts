@@ -9,6 +9,18 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiInternalServerErrorResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CampaignNotFoundError } from '../../application/campaigns/errors';
 import { OrganizationNotFoundError } from '../../application/organizations/errors';
 import { InvalidLeadEmailError, InvalidLeadScoreError } from '../../domain/leads/lead.entity';
@@ -28,7 +40,13 @@ import { CreateLeadDto } from './dto/create-lead.dto';
 import { LeadResponseDto } from './dto/lead-response.dto';
 import { UpdateLeadScoreDto } from './dto/update-lead-score.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
+import { ErrorResponseDto } from '../common/dto/error-response.dto';
 
+@ApiTags('Leads')
+@ApiInternalServerErrorResponse({
+  description: 'Unexpected internal server error',
+  type: ErrorResponseDto,
+})
 @Controller()
 export class LeadsController {
   constructor(
@@ -42,6 +60,18 @@ export class LeadsController {
   ) {}
 
   @Post('leads')
+  @ApiOperation({ summary: 'Create Lead' })
+  @ApiBody({ type: CreateLeadDto })
+  @ApiCreatedResponse({ description: 'Lead created', type: LeadResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid lead payload', type: ErrorResponseDto })
+  @ApiNotFoundResponse({
+    description: 'Organization or campaign not found',
+    type: ErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'Lead email already exists in the organization',
+    type: ErrorResponseDto,
+  })
   async create(@Body() body: unknown): Promise<LeadResponseDto> {
     const dto = CreateLeadDto.fromBody(body);
 
@@ -62,6 +92,8 @@ export class LeadsController {
   }
 
   @Get('leads')
+  @ApiOperation({ summary: 'List leads' })
+  @ApiOkResponse({ description: 'Leads returned', type: LeadResponseDto, isArray: true })
   async list(): Promise<LeadResponseDto[]> {
     const leads = await this.listLeadsUseCase.execute();
 
@@ -69,6 +101,10 @@ export class LeadsController {
   }
 
   @Get('leads/:id')
+  @ApiOperation({ summary: 'Get lead by ID' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Lead ID' })
+  @ApiOkResponse({ description: 'Lead returned', type: LeadResponseDto })
+  @ApiNotFoundResponse({ description: 'Lead not found', type: ErrorResponseDto })
   async findById(@Param('id') id: string): Promise<LeadResponseDto> {
     try {
       const lead = await this.findLeadByIdUseCase.execute(id);
@@ -80,6 +116,10 @@ export class LeadsController {
   }
 
   @Get('organizations/:organizationId/leads')
+  @ApiOperation({ summary: 'List leads by organization' })
+  @ApiParam({ name: 'organizationId', format: 'uuid', description: 'Organization ID' })
+  @ApiOkResponse({ description: 'Leads returned', type: LeadResponseDto, isArray: true })
+  @ApiNotFoundResponse({ description: 'Organization not found', type: ErrorResponseDto })
   async listByOrganization(
     @Param('organizationId') organizationId: string,
   ): Promise<LeadResponseDto[]> {
@@ -93,6 +133,10 @@ export class LeadsController {
   }
 
   @Get('campaigns/:campaignId/leads')
+  @ApiOperation({ summary: 'List leads by campaign' })
+  @ApiParam({ name: 'campaignId', format: 'uuid', description: 'Campaign ID' })
+  @ApiOkResponse({ description: 'Leads returned', type: LeadResponseDto, isArray: true })
+  @ApiNotFoundResponse({ description: 'Campaign not found', type: ErrorResponseDto })
   async listByCampaign(@Param('campaignId') campaignId: string): Promise<LeadResponseDto[]> {
     try {
       const leads = await this.listLeadsByCampaignUseCase.execute(campaignId);
@@ -104,6 +148,12 @@ export class LeadsController {
   }
 
   @Patch('leads/:id/status')
+  @ApiOperation({ summary: 'Update lead status' })
+  @ApiBody({ type: UpdateLeadStatusDto })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Lead ID' })
+  @ApiOkResponse({ description: 'Lead status updated', type: LeadResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid lead status', type: ErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'Lead not found', type: ErrorResponseDto })
   async updateStatus(@Param('id') id: string, @Body() body: unknown): Promise<LeadResponseDto> {
     const dto = UpdateLeadStatusDto.fromBody(body);
 
@@ -120,6 +170,12 @@ export class LeadsController {
   }
 
   @Patch('leads/:id/score')
+  @ApiOperation({ summary: 'Update lead score' })
+  @ApiBody({ type: UpdateLeadScoreDto })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Lead ID' })
+  @ApiOkResponse({ description: 'Lead score updated', type: LeadResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid lead score', type: ErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'Lead not found', type: ErrorResponseDto })
   async updateScore(@Param('id') id: string, @Body() body: unknown): Promise<LeadResponseDto> {
     const dto = UpdateLeadScoreDto.fromBody(body);
 

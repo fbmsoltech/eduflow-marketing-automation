@@ -1,18 +1,50 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LeadMetadata, LeadMetadataValue } from '../../../domain/leads/lead.entity';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class CreateLeadDto {
+  @ApiProperty({ example: 'ORGANIZATION_ID', format: 'uuid' })
+  readonly organizationId: string;
+
+  @ApiProperty({ example: 'ana@example.com', format: 'email' })
+  readonly email: string;
+
+  @ApiPropertyOptional({ example: 'CAMPAIGN_ID', format: 'uuid' })
+  readonly campaignId?: string;
+
+  @ApiPropertyOptional({ example: 'Ana Silva' })
+  readonly fullName?: string;
+
+  @ApiPropertyOptional({ example: '+5511999999999' })
+  readonly phone?: string;
+
+  @ApiPropertyOptional({
+    example: {
+      source: 'instagram',
+    },
+    type: 'object',
+    additionalProperties: true,
+  })
+  readonly metadata?: LeadMetadata;
+
   constructor(
-    readonly organizationId: string,
-    readonly email: string,
-    readonly campaignId?: string,
-    readonly fullName?: string,
-    readonly phone?: string,
-    readonly metadata?: LeadMetadata,
-  ) {}
+    organizationId: string,
+    email: string,
+    campaignId?: string,
+    fullName?: string,
+    phone?: string,
+    metadata?: LeadMetadata,
+  ) {
+    this.organizationId = organizationId;
+    this.email = email;
+    this.campaignId = campaignId;
+    this.fullName = fullName;
+    this.phone = phone;
+    this.metadata = metadata;
+  }
 
   static fromBody(body: unknown): CreateLeadDto {
     if (!this.isRecord(body)) {

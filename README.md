@@ -279,6 +279,23 @@ A complete curl walkthrough is available in [API Examples](docs/api-examples.md)
 6. confirming lead score and status changes;
 7. inspecting Dead Letter messages when applicable.
 
+## API Documentation
+
+Swagger/OpenAPI provides interactive documentation for the REST API:
+
+```txt
+Local Swagger UI: http://localhost:3000/docs
+Local OpenAPI JSON: http://localhost:3000/docs-json
+Public demo: RENDER_API_URL/docs
+```
+
+The interface groups endpoints by Organizations, Campaigns, Leads, Lead Events, Automations,
+Outbox, Dead Letter and Health. Request and response schemas include realistic examples, enum
+values and documented HTTP status codes.
+
+The public URL remains a placeholder until the Render deployment is validated. On Render Free, the
+first request to `/docs` after an idle period may experience a cold start.
+
 ## Workers
 
 ### Outbox Publisher Worker

@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   LeadEventPayload,
   LeadEventPayloadValue,
@@ -7,16 +8,56 @@ import {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class RegisterLeadEventDto {
+  @ApiProperty({ example: 'ORGANIZATION_ID', format: 'uuid' })
+  readonly organizationId: string;
+
+  @ApiProperty({ example: 'email.clicked' })
+  readonly eventType: string;
+
+  @ApiProperty({ example: '2026-06-21T10:30:00.000Z', format: 'date-time', type: String })
+  readonly occurredAt: Date;
+
+  @ApiProperty({ example: 'lead-event-001' })
+  readonly idempotencyKey: string;
+
+  @ApiPropertyOptional({ example: 'CAMPAIGN_ID', format: 'uuid' })
+  readonly campaignId?: string;
+
+  @ApiPropertyOptional({ example: 'LEAD_ID', format: 'uuid' })
+  readonly leadId?: string;
+
+  @ApiPropertyOptional({
+    example: {
+      link: 'https://example.com/edital',
+      source: 'email',
+    },
+    type: 'object',
+    additionalProperties: true,
+  })
+  readonly payload?: LeadEventPayload;
+
+  @ApiPropertyOptional({ example: 'demo-001' })
+  readonly correlationId?: string;
+
   constructor(
-    readonly organizationId: string,
-    readonly eventType: string,
-    readonly occurredAt: Date,
-    readonly idempotencyKey: string,
-    readonly campaignId?: string,
-    readonly leadId?: string,
-    readonly payload?: LeadEventPayload,
-    readonly correlationId?: string,
-  ) {}
+    organizationId: string,
+    eventType: string,
+    occurredAt: Date,
+    idempotencyKey: string,
+    campaignId?: string,
+    leadId?: string,
+    payload?: LeadEventPayload,
+    correlationId?: string,
+  ) {
+    this.organizationId = organizationId;
+    this.eventType = eventType;
+    this.occurredAt = occurredAt;
+    this.idempotencyKey = idempotencyKey;
+    this.campaignId = campaignId;
+    this.leadId = leadId;
+    this.payload = payload;
+    this.correlationId = correlationId;
+  }
 
   static fromBody(body: unknown): RegisterLeadEventDto {
     if (!this.isRecord(body)) {
