@@ -46,6 +46,9 @@ EduFlow provides a marketing automation engine where each lead interaction can t
 - [GitFlow Strategy](docs/gitflow.md)
 - [Deployment Strategy](docs/deployment.md)
 - [Local Development](docs/local-development.md)
+- [Azure Container Apps Deployment](docs/azure-deployment.md)
+- [Azure Secrets](docs/azure-secrets.md)
+- [Azure Deployment Runbook](docs/azure-runbook.md)
 
 ## Architecture Decision Records
 
@@ -135,6 +138,27 @@ Format files:
 ```bash
 npm run format
 ```
+
+## Azure Deployment
+
+Phase 20 prepares a manual deployment to Azure Container Apps using the image published in GHCR.
+The API uses external ingress on port `3000`; the Outbox Publisher and Automation workers run
+without ingress; PostgreSQL and Redis use managed Azure services; RabbitMQ remains an external
+cloud-reachable dependency.
+
+Start with:
+
+```bash
+cp infra/azure/env.example infra/azure/env.local
+bash infra/azure/create-resources.sh
+bash infra/azure/deploy-container-apps.sh
+bash infra/azure/run-migrations.sh
+```
+
+The current application image is not migration-capable. Configure a dedicated `MIGRATIONS_IMAGE`
+before creating or running the Azure Container Apps migration Job. See the
+[Azure Deployment Runbook](docs/azure-runbook.md) for prerequisites, secrets, probes, deployment
+order and rollback guidance.
 
 ## Code Quality
 
