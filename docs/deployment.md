@@ -107,8 +107,37 @@ The `Docker Build` workflow uses Docker Buildx to build the repository `Dockerfi
 tag `eduflow-marketing-automation:ci`. The image is loaded only into the workflow runner and is not
 published to a registry.
 
-This phase does not configure remote deployment, production secrets, Azure resources or container
-image publication.
+## Container Image Publication
+
+The `Docker Publish` workflow publishes the production application image to GitHub Container
+Registry:
+
+```txt
+ghcr.io/fbmsoltech/eduflow-marketing-automation
+```
+
+Publication runs only for pushes to `main`, semantic version tags matching `v*.*.*` and manual
+`workflow_dispatch` executions. Pull requests continue to use the separate `Docker Build` workflow,
+which never pushes images.
+
+The workflow authenticates to `ghcr.io` with the repository-scoped `GITHUB_TOKEN`. Its permissions
+are limited to reading repository contents and writing packages. No production secret is required
+for image publication.
+
+Published tags include:
+
+- the source branch for branch events;
+- the Git tag for tag events;
+- the normalized semantic version for version tags;
+- a `sha-` tag for traceability;
+- `latest` only when the workflow runs from the repository default branch.
+
+Docker metadata also supplies OCI labels during publication. The Dockerfile defines the image
+title, description, source repository and MIT license so locally built images carry the same core
+provenance information.
+
+Published images are deployment artifacts for a future deployment phase. This phase does not
+deploy containers, configure Azure resources or publish to Docker Hub.
 
 ## Deployment Flow
 
@@ -191,4 +220,6 @@ Current status:
 
 - Continuous integration is implemented for pull requests and pushes to `develop` and `main`.
 - Docker image builds are validated without publishing images.
+- Production application images are published to GitHub Container Registry from `main`, version
+  tags and manual workflow executions.
 - Remote deployment is not implemented yet.

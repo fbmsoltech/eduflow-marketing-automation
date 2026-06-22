@@ -40,6 +40,11 @@ FROM base AS runtime
 
 ENV NODE_ENV=production
 
+LABEL org.opencontainers.image.title="EduFlow Marketing Automation" \
+  org.opencontainers.image.description="Event-driven marketing automation platform for academic campaigns." \
+  org.opencontainers.image.source="https://github.com/fbmsoltech/eduflow-marketing-automation" \
+  org.opencontainers.image.licenses="MIT"
+
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
