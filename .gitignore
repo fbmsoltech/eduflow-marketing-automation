@@ -4,6 +4,7 @@ coverage
 .env
 .env.*
 !.env.example
+infra/azure/env.local
 AGENTS.md
 
 .DS_Store
