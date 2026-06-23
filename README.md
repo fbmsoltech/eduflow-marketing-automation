@@ -69,6 +69,7 @@ lost between PostgreSQL and RabbitMQ, and independent workers publish and proces
 - Internal `lead.score.updated` events for score-dependent automations
 - Task creation
 - Webhook delivery with timeout and retry
+- Demonstrative Google Meet interview scheduling through `SEND_WEBHOOK` and Google Apps Script
 - Transactional Outbox Pattern
 - RabbitMQ topic exchange and background consumers
 - Dead Letter persistence for final webhook failures
@@ -158,8 +159,10 @@ See [Architecture](docs/architecture.md) and the
 8. Score-changing actions create an internal `lead.score.updated` LeadEvent and OutboxMessage.
 9. The same Outbox and Automation Worker flow can process automations triggered by
    `lead.score.updated`.
-10. Executions, domain changes and final webhook failures are persisted.
-11. Logs, correlation IDs and metrics provide operational evidence.
+10. Webhook actions can merge `config.body` into the outbound payload, including interview
+    availability windows for the Google Meet demo.
+11. Executions, domain changes and final webhook failures are persisted.
+12. Logs, correlation IDs and metrics provide operational evidence.
 
 An idempotent retry using the same organization and `idempotencyKey` returns the existing
 LeadEvent without creating another OutboxMessage.
@@ -285,6 +288,11 @@ A complete curl walkthrough is available in [API Examples](docs/api-examples.md)
 7. confirming lead score and status changes;
 8. inspecting Dead Letter messages when applicable.
 
+The Google Meet interview scheduling demo is documented in
+[Google Meet Interview Webhook](docs/google-meet-interview-webhook.md). It uses `SEND_WEBHOOK` to
+call a Google Apps Script Web App, and interview slots are configured in
+`actions[].config.body.schedule`.
+
 ## API Documentation
 
 Swagger/OpenAPI provides interactive documentation for the REST API:
@@ -374,6 +382,7 @@ See:
 - [Render Deployment](docs/render-deployment.md)
 - [CloudAMQP](docs/cloudamqp.md)
 - [Portfolio Deployment](docs/portfolio-deployment.md)
+- [Google Meet Interview Webhook](docs/google-meet-interview-webhook.md)
 
 ## Technical Decisions
 
@@ -413,6 +422,7 @@ See:
 - [Render Deployment](docs/render-deployment.md)
 - [CloudAMQP](docs/cloudamqp.md)
 - [Portfolio Deployment](docs/portfolio-deployment.md)
+- [Google Meet Interview Webhook](docs/google-meet-interview-webhook.md)
 
 ## License
 

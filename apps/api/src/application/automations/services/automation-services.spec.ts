@@ -238,7 +238,17 @@ describe('Automation services', () => {
       id: randomUUID(),
       flowId: randomUUID(),
       type: AutomationActionType.SEND_WEBHOOK,
-      config: { url: 'https://example.com/hooks', headers: { 'x-api-key': 'secret' } },
+      config: {
+        url: 'https://example.com/hooks',
+        headers: { 'x-api-key': 'secret' },
+        body: {
+          schedule: {
+            timezone: 'America/Sao_Paulo',
+            durationMinutes: 30,
+            slots: [{ date: '2026-06-24', startTime: '19:00', endTime: '21:00' }],
+          },
+        },
+      },
     });
 
     await expect(dispatcher.dispatch(action, event, dispatchContext)).resolves.toBeUndefined();
@@ -249,11 +259,25 @@ describe('Automation services', () => {
       headers: { 'x-api-key': 'secret' },
       timeoutMs: 50,
       payload: {
+        schedule: {
+          timezone: 'America/Sao_Paulo',
+          durationMinutes: 30,
+          slots: [{ date: '2026-06-24', startTime: '19:00', endTime: '21:00' }],
+        },
         source: 'eduflow',
         eventType: event.eventType,
         organizationId,
         campaignId,
         leadId,
+        lead: {
+          id: lead.id,
+          organizationId,
+          campaignId,
+          email: 'student@example.com',
+          fullName: null,
+          status: LeadStatus.NEW,
+          score: 0,
+        },
         leadEventId: event.id,
         automationFlowId: action.flowId,
         automationExecutionId: dispatchContext.automationExecutionId,
