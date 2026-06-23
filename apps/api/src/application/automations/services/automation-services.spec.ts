@@ -7,6 +7,7 @@ import {
 } from '../../../domain/automations/automation-types';
 import { LeadEvent } from '../../../domain/lead-events/lead-event.entity';
 import { Lead, LeadStatus } from '../../../domain/leads/lead.entity';
+import { RegisterLeadEventInput } from '../../lead-events/use-cases/register-lead-event.use-case';
 import { AutomationActionDispatcherService } from './automation-action-dispatcher.service';
 import { AutomationConditionEvaluatorService } from './automation-condition-evaluator.service';
 import { AutomationFieldResolverService } from './automation-field-resolver.service';
@@ -25,6 +26,7 @@ describe('Automation services', () => {
     eventType: 'form.submitted',
     occurredAt: new Date('2026-06-06T12:00:00.000Z'),
     payload: { form: { completed: true }, points: 10 },
+    correlationId: 'correlation-001',
     idempotencyKey: randomUUID(),
   });
   const lead = Lead.create({
@@ -41,6 +43,11 @@ describe('Automation services', () => {
   const automationsRepository = { createTask: jest.fn().mockResolvedValue(undefined) };
   const webhookClient = { send: jest.fn() };
   const createDeadLetterMessageUseCase = { execute: jest.fn() };
+  const registerLeadEventUseCase: {
+    execute: jest.Mock<Promise<LeadEvent>, [RegisterLeadEventInput]>;
+  } = {
+    execute: jest.fn<Promise<LeadEvent>, [RegisterLeadEventInput]>().mockResolvedValue(event),
+  };
   const dispatchContext = { automationExecutionId: randomUUID() };
   const fieldResolver = new AutomationFieldResolverService(
     leadsRepository as never,
@@ -53,6 +60,7 @@ describe('Automation services', () => {
     leadsRepository as never,
     webhookClient,
     createDeadLetterMessageUseCase as never,
+    registerLeadEventUseCase as never,
   );
 
   beforeEach(() => {
@@ -129,6 +137,86 @@ describe('Automation services', () => {
     expect(automationsRepository.createTask).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Call candidate', leadId }),
     );
+  });
+
+  it('creates a lead.score.updated event when increasing lead score', async () => {
+    const action = AutomationAction.create({
+      id: randomUUID(),
+      flowId: randomUUID(),
+      type: AutomationActionType.INCREASE_LEAD_SCORE,
+      config: { amount: 40 },
+    });
+
+    await dispatcher.dispatch(action, event, dispatchContext);
+
+    expect(leadsRepository.updateScore).toHaveBeenCalledWith(leadId, 40);
+    expect(registerLeadEventUseCase.execute).toHaveBeenCalledWith({
+      organizationId,
+      campaignId,
+      leadId,
+      eventType: 'lead.score.updated',
+      occurredAt: expect.any(Date) as Date,
+      correlationId: 'correlation-001',
+      idempotencyKey: [
+        organizationId,
+        'lead.score.updated',
+        event.id,
+        dispatchContext.automationExecutionId,
+        action.id,
+      ].join(':'),
+      payload: {
+        source: 'automation_engine',
+        reason: 'lead_score_changed',
+        previousScore: 0,
+        newScore: 40,
+        scoreDelta: 40,
+        automationFlowId: action.flowId,
+        automationExecutionId: dispatchContext.automationExecutionId,
+        triggerLeadEventId: event.id,
+      },
+    });
+  });
+
+  it('creates a lead.score.updated event when decreasing lead score', async () => {
+    leadsRepository.findById.mockResolvedValueOnce(
+      Lead.restore({
+        ...lead.toJSON(),
+        score: 60,
+      }),
+    );
+    const action = AutomationAction.create({
+      id: randomUUID(),
+      flowId: randomUUID(),
+      type: AutomationActionType.DECREASE_LEAD_SCORE,
+      config: { amount: 15 },
+    });
+
+    await dispatcher.dispatch(action, event, dispatchContext);
+
+    expect(leadsRepository.updateScore).toHaveBeenCalledWith(leadId, 45);
+    const scoreUpdatedInput = registerLeadEventUseCase.execute.mock.calls[0]?.[0];
+    expect(scoreUpdatedInput?.eventType).toBe('lead.score.updated');
+    expect(scoreUpdatedInput?.payload).toEqual(
+      expect.objectContaining({
+        previousScore: 60,
+        newScore: 45,
+        scoreDelta: -15,
+      }),
+    );
+  });
+
+  it('does not create a lead.score.updated event when score does not change', async () => {
+    const action = AutomationAction.create({
+      id: randomUUID(),
+      flowId: randomUUID(),
+      type: AutomationActionType.DECREASE_LEAD_SCORE,
+      config: { amount: 10 },
+    });
+
+    await dispatcher.dispatch(action, event, dispatchContext);
+
+    expect(leadsRepository.updateScore).toHaveBeenCalledWith(leadId, 0);
+    expect(registerLeadEventUseCase.execute).not.toHaveBeenCalled();
   });
 
   it('rejects unsupported notification actions', async () => {

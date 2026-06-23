@@ -38,6 +38,7 @@ ORGANIZATION_ID
 CAMPAIGN_ID
 LEAD_ID
 AUTOMATION_ID
+SCORE_AUTOMATION_ID
 LEAD_EVENT_ID
 ```
 
@@ -105,8 +106,8 @@ curl --fail-with-body -X PATCH "$API_URL/leads/LEAD_ID/score" \
 
 ## 5. Create Automation
 
-This automation reacts to `form.submitted`, adds 25 points and changes the lead status to
-`ENGAGED`.
+This automation reacts to `form.submitted` and adds 40 points. When the score changes, the
+Automation Engine will create an internal `lead.score.updated` LeadEvent and matching OutboxMessage.
 
 ```bash
 curl --fail-with-body -X POST "$API_URL/automations" \
@@ -114,20 +115,14 @@ curl --fail-with-body -X POST "$API_URL/automations" \
   -d '{
     "organizationId": "ORGANIZATION_ID",
     "campaignId": "CAMPAIGN_ID",
-    "name": "Engage submitted candidates",
+    "name": "Score submitted candidates",
     "triggerEventType": "form.submitted",
     "conditions": [],
     "actions": [
       {
         "type": "INCREASE_LEAD_SCORE",
         "config": {
-          "amount": 25
-        }
-      },
-      {
-        "type": "UPDATE_LEAD_STATUS",
-        "config": {
-          "status": "ENGAGED"
+          "amount": 40
         }
       }
     ]
@@ -146,7 +141,50 @@ curl --fail-with-body -X PATCH "$API_URL/automations/AUTOMATION_ID/status" \
   }'
 ```
 
-## 7. Register LeadEvent
+## 7. Create Score-Based Automation
+
+This automation reacts to the internal `lead.score.updated` event after the score action has been
+persisted. It qualifies leads whose current score is greater than 30.
+
+```bash
+curl --fail-with-body -X POST "$API_URL/automations" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizationId": "ORGANIZATION_ID",
+    "campaignId": "CAMPAIGN_ID",
+    "name": "Qualify scored candidates",
+    "triggerEventType": "lead.score.updated",
+    "conditions": [
+      {
+        "fieldPath": "lead.score",
+        "operator": "GREATER_THAN",
+        "expectedValue": 30
+      }
+    ],
+    "actions": [
+      {
+        "type": "UPDATE_LEAD_STATUS",
+        "config": {
+          "status": "QUALIFIED"
+        }
+      }
+    ]
+  }'
+```
+
+Copy the returned `id` and use it as `SCORE_AUTOMATION_ID`.
+
+## 8. Activate Score-Based Automation
+
+```bash
+curl --fail-with-body -X PATCH "$API_URL/automations/SCORE_AUTOMATION_ID/status" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "ACTIVE"
+  }'
+```
+
+## 9. Register LeadEvent
 
 ```bash
 curl --fail-with-body -X POST "$API_URL/lead-events" \
@@ -173,19 +211,35 @@ The API commits the LeadEvent and its OutboxMessage in the same PostgreSQL trans
 same organization and idempotency key again returns the existing event without creating a duplicate
 OutboxMessage.
 
-## 8. Check OutboxMessage
+## 10. Check OutboxMessages
 
 ```bash
 curl --fail-with-body "$API_URL/outbox/messages"
 ```
 
-Find the item whose `aggregateId` is `LEAD_EVENT_ID`. With the Outbox Publisher Worker running, it
-should eventually show:
+Find the item whose `aggregateId` is `LEAD_EVENT_ID`. With the Outbox Publisher Worker running, the
+original `form.submitted` message should eventually show:
 
 ```txt
 status: PUBLISHED
 attempts: at least 1
 publishedAt: populated
+```
+
+After the Automation Worker processes the score action, a second LeadEvent with
+`eventType: lead.score.updated` should exist, with its own OutboxMessage. Its payload includes:
+
+```json
+{
+  "source": "automation_engine",
+  "reason": "lead_score_changed",
+  "previousScore": 0,
+  "newScore": 40,
+  "scoreDelta": 40,
+  "automationFlowId": "AUTOMATION_ID",
+  "automationExecutionId": "AUTOMATION_EXECUTION_ID",
+  "triggerLeadEventId": "LEAD_EVENT_ID"
+}
 ```
 
 If the publisher worker is intentionally unavailable in an API-only demo, pending messages can be
@@ -202,7 +256,7 @@ curl --fail-with-body -X POST "$API_URL/outbox/messages/publish" \
 Manual publication still requires RabbitMQ or CloudAMQP. It does not replace the Automation Worker
 that consumes the event.
 
-## 9. Check Lead Status and Score
+## 11. Check Lead Status and Score
 
 After both workers process the event:
 
@@ -214,8 +268,8 @@ Expected values for this example:
 
 ```json
 {
-  "status": "ENGAGED",
-  "score": 25
+  "status": "QUALIFIED",
+  "score": 40
 }
 ```
 
@@ -240,7 +294,7 @@ curl --fail-with-body -X POST "$API_URL/automations/evaluate" \
 Do not run both automatic and manual evaluation for the same demonstration unless the resulting
 duplicate business action is intentional.
 
-## 10. Check Dead Letter Messages, If Applicable
+## 12. Check Dead Letter Messages, If Applicable
 
 The score and status actions above should not create a Dead Letter message:
 
