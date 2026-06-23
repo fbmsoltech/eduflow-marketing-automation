@@ -1,6 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AutomationAction } from '../../../domain/automations/automation-action.entity';
-import { AutomationActionType } from '../../../domain/automations/automation-types';
+import {
+  AutomationActionType,
+  AutomationJsonObject,
+} from '../../../domain/automations/automation-types';
 import { LeadStatus } from '../../../domain/leads/lead.entity';
 import { LeadEvent } from '../../../domain/lead-events/lead-event.entity';
 import { CreateDeadLetterMessageUseCase } from '../../dead-letter/use-cases/create-dead-letter-message.use-case';
@@ -175,6 +178,7 @@ export class AutomationActionDispatcherService {
     const url = action.config['url'];
     const method = action.config['method'] ?? 'POST';
     const headers = this.parseHeaders(action);
+    const configuredBody = this.parseWebhookBody(action);
 
     if (typeof url !== 'string' || !this.isHttpUrl(url)) {
       throw new InvalidAutomationActionConfigError(action.type, 'url must be a valid HTTP URL');
@@ -186,12 +190,25 @@ export class AutomationActionDispatcherService {
       );
     }
 
+    const lead = event.leadId ? await this.leadsRepository.findById(event.leadId) : null;
     const requestPayload = {
+      ...configuredBody,
       source: 'eduflow',
       eventType: event.eventType,
       organizationId: event.organizationId,
       campaignId: event.campaignId ?? null,
       leadId: event.leadId ?? null,
+      lead: lead
+        ? {
+            id: lead.id,
+            organizationId: lead.organizationId,
+            campaignId: lead.campaignId ?? null,
+            email: lead.email,
+            fullName: lead.fullName ?? null,
+            status: lead.status,
+            score: lead.score,
+          }
+        : null,
       leadEventId: event.id,
       automationFlowId: action.flowId,
       automationExecutionId: context.automationExecutionId,
@@ -270,6 +287,15 @@ export class AutomationActionDispatcherService {
       throw new InvalidAutomationActionConfigError(action.type, 'header values must be strings');
     }
     return Object.fromEntries(entries) as Record<string, string>;
+  }
+
+  private parseWebhookBody(action: AutomationAction): AutomationJsonObject {
+    const body = action.config['body'];
+    if (body === undefined) return {};
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new InvalidAutomationActionConfigError(action.type, 'body must be an object');
+    }
+    return body;
   }
 
   private isHttpUrl(value: string): boolean {

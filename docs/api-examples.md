@@ -318,6 +318,78 @@ curl --fail-with-body -X PATCH \
 
 Automatic Dead Letter reprocessing is not implemented in the current scope.
 
+## 13. Optional Google Meet Interview Webhook
+
+Phase 27 demonstrates a `lead.score.updated` automation that qualifies the candidate and calls a
+Google Apps Script Web App to create a Google Calendar interview with Google Meet.
+
+Create this automation after replacing the IDs and the Apps Script placeholder:
+
+```bash
+curl --fail-with-body -X POST "$API_URL/automations" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizationId": "ORGANIZATION_ID",
+    "campaignId": "CAMPAIGN_ID",
+    "name": "Schedule Google Meet interview",
+    "triggerEventType": "lead.score.updated",
+    "conditions": [
+      {
+        "fieldPath": "lead.score",
+        "operator": "GREATER_THAN_OR_EQUALS",
+        "expectedValue": 30,
+        "sortOrder": 1
+      }
+    ],
+    "actions": [
+      {
+        "type": "UPDATE_LEAD_STATUS",
+        "config": {
+          "status": "QUALIFIED"
+        },
+        "sortOrder": 1
+      },
+      {
+        "type": "SEND_WEBHOOK",
+        "config": {
+          "url": "GOOGLE_APPS_SCRIPT_WEB_APP_URL",
+          "method": "POST",
+          "headers": {
+            "x-source": "eduflow",
+            "x-demo": "google-meet-interview"
+          },
+          "body": {
+            "schedule": {
+              "timezone": "America/Sao_Paulo",
+              "durationMinutes": 30,
+              "slots": [
+                {
+                  "date": "2026-06-24",
+                  "startTime": "19:00",
+                  "endTime": "21:00"
+                },
+                {
+                  "date": "2026-06-25",
+                  "startTime": "18:00",
+                  "endTime": "20:00"
+                }
+              ]
+            }
+          }
+        },
+        "sortOrder": 2
+      }
+    ]
+  }'
+```
+
+Activate the returned automation and repeat the `form.submitted` flow. The `SEND_WEBHOOK` request
+includes the configured `schedule`, EduFlow execution context and a lead summary with candidate
+email/name when the LeadEvent has a `leadId`.
+
+Full Apps Script setup and manual validation steps are in
+[Google Meet Interview Webhook](google-meet-interview-webhook.md).
+
 ## Health and Metrics
 
 ```bash
