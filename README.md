@@ -66,6 +66,7 @@ lost between PostgreSQL and RabbitMQ, and independent workers publish and proces
 - Campaign-scoped and organization-scoped automation flows
 - Condition evaluation using event and domain fields
 - Lead score and status automation
+- Internal `lead.score.updated` events for score-dependent automations
 - Task creation
 - Webhook delivery with timeout and retry
 - Transactional Outbox Pattern
@@ -154,8 +155,11 @@ See [Architecture](docs/architecture.md) and the
 5. The Automation Worker consumes the message and invokes the Automation Engine.
 6. Active flows are filtered by organization, campaign and event type.
 7. Conditions are evaluated and matching actions are executed.
-8. Executions, domain changes and final webhook failures are persisted.
-9. Logs, correlation IDs and metrics provide operational evidence.
+8. Score-changing actions create an internal `lead.score.updated` LeadEvent and OutboxMessage.
+9. The same Outbox and Automation Worker flow can process automations triggered by
+   `lead.score.updated`.
+10. Executions, domain changes and final webhook failures are persisted.
+11. Logs, correlation IDs and metrics provide operational evidence.
 
 An idempotent retry using the same organization and `idempotencyKey` returns the existing
 LeadEvent without creating another OutboxMessage.
@@ -165,6 +169,7 @@ LeadEvent without creating another OutboxMessage.
 - Event-driven architecture with independently runnable API and workers
 - Transactional Outbox Pattern for database-to-broker reliability
 - Idempotent event ingestion
+- Deterministic internal score-updated events for chained automation rules
 - RabbitMQ topic-based routing
 - Retry and persisted Dead Letter strategy for webhook failures
 - Clean modular architecture with repository contracts
@@ -276,8 +281,9 @@ A complete curl walkthrough is available in [API Examples](docs/api-examples.md)
 3. creating and activating an automation;
 4. registering a matching LeadEvent;
 5. inspecting the OutboxMessage;
-6. confirming lead score and status changes;
-7. inspecting Dead Letter messages when applicable.
+6. confirming the internal `lead.score.updated` event and OutboxMessage;
+7. confirming lead score and status changes;
+8. inspecting Dead Letter messages when applicable.
 
 ## API Documentation
 

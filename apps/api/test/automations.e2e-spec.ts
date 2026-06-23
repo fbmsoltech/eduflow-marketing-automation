@@ -19,6 +19,7 @@ import { Campaign } from '../src/domain/campaigns/campaign.entity';
 import { LeadEvent } from '../src/domain/lead-events/lead-event.entity';
 import { Lead, LeadStatus } from '../src/domain/leads/lead.entity';
 import { Organization } from '../src/domain/organizations/organization.entity';
+import { OutboxMessage } from '../src/domain/outbox/outbox-message.entity';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
 
 describe('Automations endpoints', () => {
@@ -50,11 +51,16 @@ describe('Automations endpoints', () => {
   });
   const flows = new Map<string, AutomationFlow>();
   const executions = new Map<string, AutomationExecution>();
+  const leadEvents = new Map<string, LeadEvent>();
+  const outboxMessages: OutboxMessage[] = [];
   let currentLead = lead;
 
   beforeEach(async () => {
     flows.clear();
     executions.clear();
+    leadEvents.clear();
+    leadEvents.set(event.id, event);
+    outboxMessages.length = 0;
     currentLead = lead;
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -63,7 +69,7 @@ describe('Automations endpoints', () => {
       .overrideProvider(CAMPAIGNS_REPOSITORY)
       .useValue({ findById: jest.fn().mockResolvedValue(campaign) })
       .overrideProvider(LEAD_EVENTS_REPOSITORY)
-      .useValue({ findById: jest.fn().mockResolvedValue(event) })
+      .useValue(createLeadEventsRepository())
       .overrideProvider(LEADS_REPOSITORY)
       .useValue({
         findById: jest.fn().mockImplementation(() => Promise.resolve(currentLead)),
@@ -128,6 +134,77 @@ describe('Automations endpoints', () => {
       expect.objectContaining({ matchedFlows: 1, executedFlows: 1, failedFlows: 0 }),
     );
     expect(currentLead.score).toBe(10);
+  });
+
+  it('evaluates lead.score.updated automations after score actions create an internal event', async () => {
+    const scoringResponse = await request(httpServer)
+      .post('/automations')
+      .send({
+        organizationId: organization.id,
+        campaignId: campaign.id,
+        name: 'Score submitted form',
+        triggerEventType: 'form.submitted',
+        conditions: [],
+        actions: [{ type: 'INCREASE_LEAD_SCORE', config: { amount: 40 } }],
+      })
+      .expect(201);
+    await request(httpServer)
+      .patch(`/automations/${(scoringResponse.body as { id: string }).id}/status`)
+      .send({ status: 'ACTIVE' })
+      .expect(200);
+
+    const qualificationResponse = await request(httpServer)
+      .post('/automations')
+      .send({
+        organizationId: organization.id,
+        campaignId: campaign.id,
+        name: 'Qualify scored lead',
+        triggerEventType: 'lead.score.updated',
+        conditions: [
+          {
+            fieldPath: 'lead.score',
+            operator: 'GREATER_THAN',
+            expectedValue: 30,
+          },
+        ],
+        actions: [{ type: 'UPDATE_LEAD_STATUS', config: { status: 'QUALIFIED' } }],
+      })
+      .expect(201);
+    await request(httpServer)
+      .patch(`/automations/${(qualificationResponse.body as { id: string }).id}/status`)
+      .send({ status: 'ACTIVE' })
+      .expect(200);
+
+    await request(httpServer)
+      .post('/automations/evaluate')
+      .send({ leadEventId: event.id })
+      .expect(201);
+
+    const scoreUpdatedEvent = Array.from(leadEvents.values()).find(
+      (leadEvent) => leadEvent.eventType === 'lead.score.updated',
+    );
+    expect(scoreUpdatedEvent).toBeDefined();
+    expect(scoreUpdatedEvent?.payload).toEqual(
+      expect.objectContaining({
+        previousScore: 0,
+        newScore: 40,
+        scoreDelta: 40,
+        triggerLeadEventId: event.id,
+      }),
+    );
+    expect(outboxMessages).toContainEqual(
+      expect.objectContaining({
+        eventType: 'lead.score.updated',
+        aggregateId: scoreUpdatedEvent?.id,
+      }),
+    );
+
+    await request(httpServer)
+      .post('/automations/evaluate')
+      .send({ leadEventId: scoreUpdatedEvent?.id })
+      .expect(201);
+
+    expect(currentLead.status).toBe(LeadStatus.QUALIFIED);
   });
 
   it('validates required actions and leadEventId', async () => {
@@ -228,6 +305,60 @@ describe('Automations endpoints', () => {
         return Promise.resolve(updated);
       },
       createTask: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  function createLeadEventsRepository() {
+    return {
+      create: (leadEvent: LeadEvent) => {
+        const existing = Array.from(leadEvents.values()).find(
+          (item) =>
+            item.organizationId === leadEvent.organizationId &&
+            item.idempotencyKey === leadEvent.idempotencyKey,
+        );
+        if (existing) return Promise.resolve(existing);
+
+        leadEvents.set(leadEvent.id, leadEvent);
+        return Promise.resolve(leadEvent);
+      },
+      createWithOutboxMessage: (leadEvent: LeadEvent, outboxMessage: OutboxMessage) => {
+        const existing = Array.from(leadEvents.values()).find(
+          (item) =>
+            item.organizationId === leadEvent.organizationId &&
+            item.idempotencyKey === leadEvent.idempotencyKey,
+        );
+        if (existing) return Promise.resolve(existing);
+
+        leadEvents.set(leadEvent.id, leadEvent);
+        outboxMessages.push(outboxMessage);
+        return Promise.resolve(leadEvent);
+      },
+      findById: (id: string) => Promise.resolve(leadEvents.get(id) ?? null),
+      findByOrganizationIdAndIdempotencyKey: (organizationId: string, idempotencyKey: string) =>
+        Promise.resolve(
+          Array.from(leadEvents.values()).find(
+            (leadEvent) =>
+              leadEvent.organizationId === organizationId &&
+              leadEvent.idempotencyKey === idempotencyKey,
+          ) ?? null,
+        ),
+      list: () => Promise.resolve(Array.from(leadEvents.values())),
+      listByOrganizationId: (organizationId: string) =>
+        Promise.resolve(
+          Array.from(leadEvents.values()).filter(
+            (leadEvent) => leadEvent.organizationId === organizationId,
+          ),
+        ),
+      listByCampaignId: (campaignId: string) =>
+        Promise.resolve(
+          Array.from(leadEvents.values()).filter(
+            (leadEvent) => leadEvent.campaignId === campaignId,
+          ),
+        ),
+      listByLeadId: (leadId: string) =>
+        Promise.resolve(
+          Array.from(leadEvents.values()).filter((leadEvent) => leadEvent.leadId === leadId),
+        ),
     };
   }
 });
