@@ -26,11 +26,8 @@ actions such as:
 Public API base URL:
 
 ```txt
-RENDER_API_URL
+https://eduflow-api-yh8u.onrender.com
 ```
-
-The repository does not publish an unverified URL. Replace `RENDER_API_URL` only after confirming
-the deployed service in Render.
 
 The public environment is an intentionally free or low-cost portfolio demo, not a production
 service. A Render Free Web Service may sleep while idle and incur a cold start on the next request.
@@ -41,10 +38,10 @@ Compose.
 Useful endpoints:
 
 ```txt
-GET RENDER_API_URL/health/live
-GET RENDER_API_URL/health/ready
-GET RENDER_API_URL/health
-GET RENDER_API_URL/metrics
+GET https://eduflow-api-yh8u.onrender.com/health/live
+GET https://eduflow-api-yh8u.onrender.com/health/ready
+GET https://eduflow-api-yh8u.onrender.com/health
+GET https://eduflow-api-yh8u.onrender.com/metrics
 ```
 
 ## Problem
