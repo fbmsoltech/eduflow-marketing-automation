@@ -226,9 +226,41 @@ Example: a candidate submits a campaign form.
 6. The Automation Worker consumes the message.
 7. Active form.submitted flows are evaluated.
 8. Matching actions update lead state, create tasks or call webhooks.
-9. AutomationExecution stores success or failure.
-10. Logs and metrics expose the result.
+9. Score-changing actions register a new internal `lead.score.updated` LeadEvent and OutboxMessage.
+10. The Outbox Publisher Worker publishes `lead.score.updated`.
+11. The Automation Worker can evaluate flows whose trigger event type is `lead.score.updated`.
+12. AutomationExecution stores success or failure.
+13. Logs and metrics expose the result.
 ```
+
+## Internal Lead Score Event
+
+Automation score actions emit an internal LeadEvent when they change a lead score:
+
+```txt
+eventType: lead.score.updated
+source: automation_engine
+reason: lead_score_changed
+```
+
+The payload includes:
+
+- `previousScore`
+- `newScore`
+- `scoreDelta`
+- `automationFlowId`
+- `automationExecutionId`
+- `triggerLeadEventId`
+
+This prevents a flow that depends on `lead.score` from racing against the same source event that
+changed the score. A `form.submitted` flow can update the score, and a separate
+`lead.score.updated` flow can evaluate `lead.score > 30` after the score is persisted.
+
+The internal event reuses the existing LeadEvent registration use case. The LeadEvent and its
+OutboxMessage are committed together, then the normal Outbox Publisher Worker, RabbitMQ routing and
+Automation Worker path process it. The idempotency key is deterministic for the organization,
+trigger LeadEvent, AutomationExecution and AutomationAction, which avoids duplicate score-updated
+events when the same execution/action is retried.
 
 ## Transactional Outbox Pattern
 

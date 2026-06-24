@@ -1,9 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AutomationAction } from '../../../domain/automations/automation-action.entity';
-import { AutomationActionType } from '../../../domain/automations/automation-types';
+import {
+  AutomationActionType,
+  AutomationJsonObject,
+} from '../../../domain/automations/automation-types';
 import { LeadStatus } from '../../../domain/leads/lead.entity';
 import { LeadEvent } from '../../../domain/lead-events/lead-event.entity';
 import { CreateDeadLetterMessageUseCase } from '../../dead-letter/use-cases/create-dead-letter-message.use-case';
+import { RegisterLeadEventUseCase } from '../../lead-events/use-cases/register-lead-event.use-case';
 import { LEADS_REPOSITORY, LeadsRepository } from '../../leads/leads.repository';
 import { WEBHOOK_CLIENT, WebhookClient } from '../../webhooks/webhook-client';
 import { AUTOMATIONS_REPOSITORY, AutomationsRepository } from '../automations.repository';
@@ -32,6 +36,7 @@ export class AutomationActionDispatcherService {
     @Inject(WEBHOOK_CLIENT)
     private readonly webhookClient: WebhookClient,
     private readonly createDeadLetterMessageUseCase: CreateDeadLetterMessageUseCase,
+    private readonly registerLeadEventUseCase: RegisterLeadEventUseCase,
   ) {}
 
   async dispatch(
@@ -41,10 +46,10 @@ export class AutomationActionDispatcherService {
   ): Promise<void> {
     switch (action.type) {
       case AutomationActionType.INCREASE_LEAD_SCORE:
-        await this.changeLeadScore(action, event, 1);
+        await this.changeLeadScore(action, event, context, 1);
         return;
       case AutomationActionType.DECREASE_LEAD_SCORE:
-        await this.changeLeadScore(action, event, -1);
+        await this.changeLeadScore(action, event, context, -1);
         return;
       case AutomationActionType.UPDATE_LEAD_STATUS:
         await this.updateLeadStatus(action, event);
@@ -73,6 +78,7 @@ export class AutomationActionDispatcherService {
   private async changeLeadScore(
     action: AutomationAction,
     event: LeadEvent,
+    context: AutomationActionDispatchContext,
     direction: 1 | -1,
   ): Promise<void> {
     const lead = await this.requireLead(event, action.type);
@@ -85,7 +91,39 @@ export class AutomationActionDispatcherService {
       );
     }
 
-    await this.leadsRepository.updateScore(lead.id, Math.max(0, lead.score + amount * direction));
+    const previousScore = lead.score;
+    const newScore = Math.max(0, previousScore + amount * direction);
+    const scoreDelta = newScore - previousScore;
+
+    await this.leadsRepository.updateScore(lead.id, newScore);
+
+    if (scoreDelta === 0) return;
+
+    await this.registerLeadEventUseCase.execute({
+      organizationId: lead.organizationId,
+      campaignId: lead.campaignId,
+      leadId: lead.id,
+      eventType: 'lead.score.updated',
+      occurredAt: new Date(),
+      correlationId: event.correlationId,
+      idempotencyKey: [
+        lead.organizationId,
+        'lead.score.updated',
+        event.id,
+        context.automationExecutionId,
+        action.id,
+      ].join(':'),
+      payload: {
+        source: 'automation_engine',
+        reason: 'lead_score_changed',
+        previousScore,
+        newScore,
+        scoreDelta,
+        automationFlowId: action.flowId,
+        automationExecutionId: context.automationExecutionId,
+        triggerLeadEventId: event.id,
+      },
+    });
   }
 
   private async updateLeadStatus(action: AutomationAction, event: LeadEvent): Promise<void> {
@@ -140,6 +178,7 @@ export class AutomationActionDispatcherService {
     const url = action.config['url'];
     const method = action.config['method'] ?? 'POST';
     const headers = this.parseHeaders(action);
+    const configuredBody = this.parseWebhookBody(action);
 
     if (typeof url !== 'string' || !this.isHttpUrl(url)) {
       throw new InvalidAutomationActionConfigError(action.type, 'url must be a valid HTTP URL');
@@ -151,12 +190,25 @@ export class AutomationActionDispatcherService {
       );
     }
 
+    const lead = event.leadId ? await this.leadsRepository.findById(event.leadId) : null;
     const requestPayload = {
+      ...configuredBody,
       source: 'eduflow',
       eventType: event.eventType,
       organizationId: event.organizationId,
       campaignId: event.campaignId ?? null,
       leadId: event.leadId ?? null,
+      lead: lead
+        ? {
+            id: lead.id,
+            organizationId: lead.organizationId,
+            campaignId: lead.campaignId ?? null,
+            email: lead.email,
+            fullName: lead.fullName ?? null,
+            status: lead.status,
+            score: lead.score,
+          }
+        : null,
       leadEventId: event.id,
       automationFlowId: action.flowId,
       automationExecutionId: context.automationExecutionId,
@@ -235,6 +287,15 @@ export class AutomationActionDispatcherService {
       throw new InvalidAutomationActionConfigError(action.type, 'header values must be strings');
     }
     return Object.fromEntries(entries) as Record<string, string>;
+  }
+
+  private parseWebhookBody(action: AutomationAction): AutomationJsonObject {
+    const body = action.config['body'];
+    if (body === undefined) return {};
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new InvalidAutomationActionConfigError(action.type, 'body must be an object');
+    }
+    return body;
   }
 
   private isHttpUrl(value: string): boolean {

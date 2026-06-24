@@ -121,6 +121,17 @@ The complete remote demo additionally requires:
 5. expected lead score or status changes;
 6. worker logs correlated with the test event.
 
+The optional Google Meet interview demo additionally requires external Apps Script evidence:
+
+1. Apps Script Web App deployed without committing its real URL;
+2. Google Calendar API enabled in Apps Script;
+3. `SEND_WEBHOOK` delivery to the Web App;
+4. Calendar event created with Google Meet;
+5. synthetic candidate mailbox receiving the invite.
+
+See [Google Meet Interview Webhook](google-meet-interview-webhook.md). This integration does not
+change the Render or CloudAMQP deployment strategy.
+
 Use [API Examples](api-examples.md) for the functional walkthrough.
 
 ## Evidence Template
